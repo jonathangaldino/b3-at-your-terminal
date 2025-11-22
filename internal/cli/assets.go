@@ -38,8 +38,8 @@ Este comando permite vincular o direito de subscrição ao ativo original.`,
 
 var assetsOverviewCmd = &cobra.Command{
 	Use:   "overview",
-	Short: "Exibe um resumo de todos os ativos da carteira",
-	Long: `Exibe uma visão geral de todos os ativos na carteira atual, mostrando:
+	Short: "Exibe um resumo dos ativos ativos da carteira",
+	Long: `Exibe uma visão geral dos ativos que você possui atualmente (quantity != 0), mostrando:
 - Código de negociação (ticker)
 - Quantidade de ativos em carteira
 - Valor total investido (soma de todas as compras)
@@ -54,9 +54,31 @@ Use 'b3cli wallet open <diretório>' para abrir uma wallet.`,
 	RunE: runAssetsOverview,
 }
 
+var assetsSoldCmd = &cobra.Command{
+	Use:   "sold",
+	Short: "Exibe ativos que foram vendidos completamente",
+	Long: `Exibe uma lista de ativos que foram vendidos completamente (quantity == 0).
+
+Estes ativos não aparecem mais na carteira principal, mas seu histórico
+de transações e informações são mantidos para referência futura.
+
+A lista mostra:
+- Código de negociação (ticker)
+- Valor total que foi investido
+- Preço médio que foi pago
+- Quantidade vendida
+
+IMPORTANTE: Você deve ter aberto uma wallet antes de usar este comando.
+Use 'b3cli wallet open <diretório>' para abrir uma wallet.`,
+	Example: `  b3cli assets sold`,
+	Args: cobra.NoArgs,
+	RunE: runAssetsSold,
+}
+
 func init() {
 	assetsCmd.AddCommand(assetsSubscriptionCmd)
 	assetsCmd.AddCommand(assetsOverviewCmd)
+	assetsCmd.AddCommand(assetsSoldCmd)
 }
 
 func runAssetsSubscription(cmd *cobra.Command, args []string) error {
@@ -154,13 +176,25 @@ func runAssetsOverview(cmd *cobra.Command, args []string) error {
 	}
 	sort.Strings(tickers)
 
+	// Contar ativos ativos (quantity != 0)
+	activeCount := 0
+	for _, ticker := range tickers {
+		if w.Assets[ticker].Quantity != 0 {
+			activeCount++
+		}
+	}
+
 	// Exibir cabeçalho
 	fmt.Printf("\n=== RESUMO DE ATIVOS ===\n")
-	fmt.Printf("Total de ativos: %d\n\n", len(w.Assets))
+	fmt.Printf("Ativos em carteira: %d\n\n", activeCount)
 
-	// Exibir cada ativo
+	// Exibir apenas ativos com quantity != 0
 	for _, ticker := range tickers {
 		asset := w.Assets[ticker]
+		if asset.Quantity == 0 {
+			continue // Pular assets vendidos completamente
+		}
+
 		fmt.Printf("%s - %d ativos - R$ %s investido - PM: R$ %s\n",
 			ticker,
 			asset.Quantity,
@@ -169,6 +203,71 @@ func runAssetsOverview(cmd *cobra.Command, args []string) error {
 		)
 	}
 
+	// Mostrar dica sobre assets vendidos se houver
+	soldCount := len(w.Assets) - activeCount
+	if soldCount > 0 {
+		fmt.Printf("\nℹ  Você possui %d ativo(s) vendido(s) completamente.\n", soldCount)
+		fmt.Printf("   Use 'b3cli assets sold' para visualizá-los.\n")
+	}
+
+	fmt.Println()
+	return nil
+}
+
+func runAssetsSold(cmd *cobra.Command, args []string) error {
+	// Obter wallet atual
+	absPath, err := config.GetCurrentWallet()
+	if err != nil {
+		return err
+	}
+
+	// Verificar se a wallet existe
+	if !wallet.Exists(absPath) {
+		return fmt.Errorf("wallet não encontrada em %s", absPath)
+	}
+
+	// Carregar wallet
+	w, err := wallet.Load(absPath)
+	if err != nil {
+		return fmt.Errorf("erro ao carregar wallet: %w", err)
+	}
+
+	// Coletar ativos vendidos (quantity == 0)
+	soldTickers := make([]string, 0)
+	for ticker, asset := range w.Assets {
+		if asset.Quantity == 0 {
+			soldTickers = append(soldTickers, ticker)
+		}
+	}
+
+	// Verificar se há ativos vendidos
+	if len(soldTickers) == 0 {
+		fmt.Println("\nNenhum ativo vendido completamente encontrado.")
+		fmt.Println("Todos os ativos que você comprou ainda estão em carteira.")
+		fmt.Println()
+		return nil
+	}
+
+	// Ordenar por ticker
+	sort.Strings(soldTickers)
+
+	// Exibir cabeçalho
+	fmt.Printf("\n=== ATIVOS VENDIDOS COMPLETAMENTE ===\n")
+	fmt.Printf("Total: %d\n\n", len(soldTickers))
+
+	// Exibir cada ativo vendido
+	for _, ticker := range soldTickers {
+		asset := w.Assets[ticker]
+		fmt.Printf("%s - Vendido - R$ %s investido (PM: R$ %s)\n",
+			ticker,
+			asset.TotalInvestedValue.StringFixed(2),
+			asset.AveragePrice.StringFixed(4),
+		)
+	}
+
+	fmt.Println()
+	fmt.Println("ℹ  Estes ativos foram vendidos completamente mas seu histórico")
+	fmt.Println("   de transações ainda está disponível em transactions.yaml")
 	fmt.Println()
 	return nil
 }

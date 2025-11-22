@@ -40,7 +40,8 @@ type TransactionYAML struct {
 }
 
 // Save salva a wallet em arquivos YAML separados
-// - assets.yaml: contém a lista de ativos
+// - assets.yaml: contém apenas ativos ativos (quantity != 0)
+// - sold-assets.yaml: contém ativos vendidos completamente (quantity == 0)
 // - transactions.yaml: contém a lista de transações
 func (w *Wallet) Save(dirPath string) error {
 	// Criar diretório se não existir
@@ -48,7 +49,7 @@ func (w *Wallet) Save(dirPath string) error {
 		return err
 	}
 
-	// Salvar assets
+	// Salvar assets ativos e vendidos
 	if err := w.saveAssets(dirPath); err != nil {
 		return err
 	}
@@ -61,7 +62,9 @@ func (w *Wallet) Save(dirPath string) error {
 	return nil
 }
 
-// saveAssets salva apenas os ativos em assets.yaml
+// saveAssets salva os ativos em dois arquivos separados:
+// - assets.yaml: apenas ativos com quantity != 0 (carteira atual)
+// - sold-assets.yaml: ativos com quantity == 0 (vendidos completamente)
 func (w *Wallet) saveAssets(dirPath string) error {
 	// Coletar e ordenar assets por ticker
 	tickers := make([]string, 0, len(w.Assets))
@@ -70,11 +73,13 @@ func (w *Wallet) saveAssets(dirPath string) error {
 	}
 	sort.Strings(tickers)
 
-	// Converter para AssetYAML
-	assetsYAML := make([]AssetYAML, 0, len(w.Assets))
+	// Separar assets ativos dos vendidos
+	activeAssets := make([]AssetYAML, 0)
+	soldAssets := make([]AssetYAML, 0)
+
 	for _, ticker := range tickers {
 		asset := w.Assets[ticker]
-		assetsYAML = append(assetsYAML, AssetYAML{
+		assetYAML := AssetYAML{
 			Ticker:             asset.ID,
 			Type:               asset.Type,
 			SubType:            asset.SubType,
@@ -84,18 +89,48 @@ func (w *Wallet) saveAssets(dirPath string) error {
 			Quantity:           asset.Quantity,
 			IsSubscription:     asset.IsSubscription,
 			SubscriptionOf:     asset.SubscriptionOf,
-		})
+		}
+
+		if asset.Quantity == 0 {
+			soldAssets = append(soldAssets, assetYAML)
+		} else {
+			activeAssets = append(activeAssets, assetYAML)
+		}
 	}
 
-	// Serializar para YAML
-	data, err := yaml.Marshal(assetsYAML)
-	if err != nil {
-		return err
+	// Salvar assets ativos
+	if len(activeAssets) > 0 {
+		data, err := yaml.Marshal(activeAssets)
+		if err != nil {
+			return err
+		}
+		filePath := filepath.Join(dirPath, "assets.yaml")
+		if err := os.WriteFile(filePath, data, 0644); err != nil {
+			return err
+		}
+	} else {
+		// Se não houver assets ativos, remover o arquivo
+		filePath := filepath.Join(dirPath, "assets.yaml")
+		os.Remove(filePath)
 	}
 
-	// Salvar arquivo
-	filePath := filepath.Join(dirPath, "assets.yaml")
-	return os.WriteFile(filePath, data, 0644)
+	// Salvar assets vendidos
+	if len(soldAssets) > 0 {
+		data, err := yaml.Marshal(soldAssets)
+		if err != nil {
+			return err
+		}
+		filePath := filepath.Join(dirPath, "sold-assets.yaml")
+		if err := os.WriteFile(filePath, data, 0644); err != nil {
+			return err
+		}
+	} else {
+		// Se não houver assets vendidos, remover o arquivo
+		filePath := filepath.Join(dirPath, "sold-assets.yaml")
+		os.Remove(filePath)
+	}
+
+	return nil
 }
 
 // saveTransactions salva apenas as transações em transactions.yaml
@@ -202,29 +237,37 @@ func loadTransactions(dirPath string) ([]parser.Transaction, error) {
 	return transactions, nil
 }
 
-// loadAssetsMetadata carrega metadados dos assets do arquivo assets.yaml
+// loadAssetsMetadata carrega metadados dos assets de assets.yaml e sold-assets.yaml
 func loadAssetsMetadata(dirPath string, w *Wallet) error {
-	filePath := filepath.Join(dirPath, "assets.yaml")
-
-	// Ler arquivo
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		return err
+	// Carregar assets ativos
+	activePath := filepath.Join(dirPath, "assets.yaml")
+	if data, err := os.ReadFile(activePath); err == nil {
+		var assetsYAML []AssetYAML
+		if err := yaml.Unmarshal(data, &assetsYAML); err == nil {
+			for _, ay := range assetsYAML {
+				if asset, exists := w.Assets[ay.Ticker]; exists {
+					asset.IsSubscription = ay.IsSubscription
+					asset.SubscriptionOf = ay.SubscriptionOf
+					asset.SubType = ay.SubType
+					asset.Segment = ay.Segment
+				}
+			}
+		}
 	}
 
-	// Deserializar YAML
-	var assetsYAML []AssetYAML
-	if err := yaml.Unmarshal(data, &assetsYAML); err != nil {
-		return err
-	}
-
-	// Restaurar metadados que não são recalculados automaticamente
-	for _, ay := range assetsYAML {
-		if asset, exists := w.Assets[ay.Ticker]; exists {
-			asset.IsSubscription = ay.IsSubscription
-			asset.SubscriptionOf = ay.SubscriptionOf
-			asset.SubType = ay.SubType
-			asset.Segment = ay.Segment
+	// Carregar assets vendidos
+	soldPath := filepath.Join(dirPath, "sold-assets.yaml")
+	if data, err := os.ReadFile(soldPath); err == nil {
+		var assetsYAML []AssetYAML
+		if err := yaml.Unmarshal(data, &assetsYAML); err == nil {
+			for _, ay := range assetsYAML {
+				if asset, exists := w.Assets[ay.Ticker]; exists {
+					asset.IsSubscription = ay.IsSubscription
+					asset.SubscriptionOf = ay.SubscriptionOf
+					asset.SubType = ay.SubType
+					asset.Segment = ay.Segment
+				}
+			}
 		}
 	}
 

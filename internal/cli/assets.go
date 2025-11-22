@@ -75,10 +75,36 @@ Use 'b3cli wallet open <diretório>' para abrir uma wallet.`,
 	RunE: runAssetsSold,
 }
 
+var assetsManageCmd = &cobra.Command{
+	Use:   "manage",
+	Short: "Gerencia ativos interativamente",
+	Long: `Interface interativa para gerenciar metadados dos ativos da carteira.
+
+Permite navegar pela lista de ativos e editar:
+- Type: tipo do ativo (ex: renda variável, renda fixa)
+- SubType: subtipo (ex: ações, fundos imobiliários)
+- Segment: segmento (ex: tecnologia, energia)
+
+Navegação:
+- ↑/↓ ou j/k: navegar pela lista
+- Enter: selecionar ativo para editar
+- Tab/↑/↓: navegar entre campos de edição
+- Enter: salvar alterações
+- Esc: voltar para lista
+- q ou Ctrl+C: sair
+
+IMPORTANTE: Você deve ter aberto uma wallet antes de usar este comando.
+Use 'b3cli wallet open <diretório>' para abrir uma wallet.`,
+	Example: `  b3cli assets manage`,
+	Args: cobra.NoArgs,
+	RunE: runAssetsManage,
+}
+
 func init() {
 	assetsCmd.AddCommand(assetsSubscriptionCmd)
 	assetsCmd.AddCommand(assetsOverviewCmd)
 	assetsCmd.AddCommand(assetsSoldCmd)
+	assetsCmd.AddCommand(assetsManageCmd)
 }
 
 func runAssetsSubscription(cmd *cobra.Command, args []string) error {

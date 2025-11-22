@@ -171,6 +171,14 @@ func runAssetsSubscription(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// assetGroup representa um grupo de ativos por SubType e Segment
+type assetGroup struct {
+	subType string
+	segment string
+	assets  []*wallet.Asset
+	tickers []string
+}
+
 func runAssetsOverview(cmd *cobra.Command, args []string) error {
 	// Obter wallet atual
 	absPath, err := config.GetCurrentWallet()
@@ -195,48 +203,107 @@ func runAssetsOverview(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Coletar e ordenar tickers
-	tickers := make([]string, 0, len(w.Assets))
-	for ticker := range w.Assets {
-		tickers = append(tickers, ticker)
-	}
-	sort.Strings(tickers)
-
-	// Contar ativos ativos (quantity != 0)
+	// Agrupar ativos por (SubType, Segment)
+	groups := make(map[string]*assetGroup)
 	activeCount := 0
-	for _, ticker := range tickers {
-		if w.Assets[ticker].Quantity != 0 {
-			activeCount++
+
+	for ticker, asset := range w.Assets {
+		// Apenas ativos ativos (quantity != 0)
+		if asset.Quantity == 0 {
+			continue
 		}
+
+		activeCount++
+
+		// Usar valores padrão se não estiverem definidos
+		subType := asset.SubType
+		if subType == "" {
+			subType = "(sem classificação)"
+		}
+		segment := asset.Segment
+		if segment == "" {
+			segment = "(sem segmento)"
+		}
+
+		// Criar chave única para o grupo
+		key := fmt.Sprintf("%s|%s", subType, segment)
+
+		// Criar grupo se não existir
+		if _, exists := groups[key]; !exists {
+			groups[key] = &assetGroup{
+				subType: subType,
+				segment: segment,
+				assets:  make([]*wallet.Asset, 0),
+				tickers: make([]string, 0),
+			}
+		}
+
+		// Adicionar ativo ao grupo
+		groups[key].assets = append(groups[key].assets, asset)
+		groups[key].tickers = append(groups[key].tickers, ticker)
 	}
+
+	// Verificar se há ativos ativos
+	if activeCount == 0 {
+		fmt.Println("\nNenhum ativo ativo encontrado na carteira.")
+		soldCount := len(w.Assets)
+		if soldCount > 0 {
+			fmt.Printf("Você possui %d ativo(s) vendido(s) completamente.\n", soldCount)
+			fmt.Printf("Use 'b3cli assets sold' para visualizá-los.\n")
+		}
+		fmt.Println()
+		return nil
+	}
+
+	// Ordenar grupos por SubType e depois por Segment
+	sortedKeys := make([]string, 0, len(groups))
+	for key := range groups {
+		sortedKeys = append(sortedKeys, key)
+	}
+	sort.Slice(sortedKeys, func(i, j int) bool {
+		gi := groups[sortedKeys[i]]
+		gj := groups[sortedKeys[j]]
+		if gi.subType != gj.subType {
+			return gi.subType < gj.subType
+		}
+		return gi.segment < gj.segment
+	})
 
 	// Exibir cabeçalho
 	fmt.Printf("\n=== RESUMO DE ATIVOS ===\n")
 	fmt.Printf("Ativos em carteira: %d\n\n", activeCount)
 
-	// Exibir apenas ativos com quantity != 0
-	for _, ticker := range tickers {
-		asset := w.Assets[ticker]
-		if asset.Quantity == 0 {
-			continue // Pular assets vendidos completamente
+	// Exibir cada grupo
+	for _, key := range sortedKeys {
+		group := groups[key]
+
+		// Ordenar tickers dentro do grupo
+		sort.Strings(group.tickers)
+
+		// Exibir cabeçalho do grupo
+		fmt.Printf("[%s / %s]\n", group.subType, group.segment)
+
+		// Exibir cada ativo do grupo
+		for i, ticker := range group.tickers {
+			asset := group.assets[i]
+			fmt.Printf("  %s - %d ativos - R$ %s investido - PM: R$ %s\n",
+				ticker,
+				asset.Quantity,
+				asset.TotalInvestedValue.StringFixed(2),
+				asset.AveragePrice.StringFixed(4),
+			)
 		}
 
-		fmt.Printf("%s - %d ativos - R$ %s investido - PM: R$ %s\n",
-			ticker,
-			asset.Quantity,
-			asset.TotalInvestedValue.StringFixed(2),
-			asset.AveragePrice.StringFixed(4),
-		)
+		fmt.Println() // Linha em branco entre grupos
 	}
 
 	// Mostrar dica sobre assets vendidos se houver
 	soldCount := len(w.Assets) - activeCount
 	if soldCount > 0 {
-		fmt.Printf("\nℹ  Você possui %d ativo(s) vendido(s) completamente.\n", soldCount)
-		fmt.Printf("   Use 'b3cli assets sold' para visualizá-los.\n")
+		fmt.Printf("ℹ  Você possui %d ativo(s) vendido(s) completamente.\n", soldCount)
+		fmt.Printf("   Use 'b3cli assets sold' para visualizá-los.\n\n")
 	}
 
-	fmt.Println()
 	return nil
 }
 

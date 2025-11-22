@@ -9,14 +9,14 @@ import (
 // O hash é baseado em todos os campos da transação para garantir unicidade
 func generateHash(t *Transaction) string {
 	data := fmt.Sprintf(
-		"%s|%s|%s|%s|%.8f|%.8f|%.8f",
+		"%s|%s|%s|%s|%s|%s|%s",
 		t.Date.Format("2006-01-02"),
 		t.Type,
 		t.Institution,
 		t.Ticker,
-		t.Quantity,
-		t.Price,
-		t.Amount,
+		t.Quantity.StringFixed(8),
+		t.Price.StringFixed(8),
+		t.Amount.StringFixed(8),
 	)
 
 	hash := sha256.Sum256([]byte(data))

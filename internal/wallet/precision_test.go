@@ -107,7 +107,7 @@ func TestRealWorldFinancialScenarios(t *testing.T) {
 
 	t.Run("Precisão com 4 casas decimais (padrão B3)", func(t *testing.T) {
 		// Valores com 4 casas decimais são comuns na B3
-		price := decimal.NewFromString("15.2374")
+		price, _ := decimal.NewFromString("15.2374")
 		qty := decimal.NewFromInt(100)
 		total := price.Mul(qty).Round(2) // Total em R$ com 2 casas
 

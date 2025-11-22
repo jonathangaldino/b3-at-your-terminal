@@ -22,4 +22,5 @@ func Execute() error {
 func init() {
 	// Adicionar subcomandos aqui
 	rootCmd.AddCommand(parseCmd)
+	rootCmd.AddCommand(walletCmd)
 }

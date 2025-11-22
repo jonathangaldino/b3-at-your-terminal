@@ -22,3 +22,9 @@ func generateHash(t *Transaction) string {
 	hash := sha256.Sum256([]byte(data))
 	return fmt.Sprintf("%x", hash)
 }
+
+// CalculateHash é uma função pública que calcula o hash de uma transação
+// Útil para recalcular hashes quando campos de uma transação são modificados
+func CalculateHash(t *Transaction) string {
+	return generateHash(t)
+}

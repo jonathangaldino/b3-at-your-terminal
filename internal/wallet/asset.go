@@ -36,4 +36,11 @@ type Asset struct {
 	// Calculado como: (total de compras) - (total de vendas)
 	// Arredondado para número inteiro
 	Quantity int
+
+	// IsSubscription indica se este ativo é um direito de subscrição
+	IsSubscription bool
+
+	// SubscriptionOf é o ticker do ativo ao qual este direito de subscrição pertence
+	// Só é preenchido se IsSubscription for true
+	SubscriptionOf string
 }

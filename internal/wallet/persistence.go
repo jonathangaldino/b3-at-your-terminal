@@ -28,6 +28,8 @@ type AssetYAML struct {
 	AveragePrice       string `yaml:"average_price"`
 	TotalInvestedValue string `yaml:"total_invested_value"`
 	Quantity           int    `yaml:"quantity"`
+	IsSubscription     bool   `yaml:"is_subscription,omitempty"`
+	SubscriptionOf     string `yaml:"subscription_of,omitempty"`
 }
 
 // TransactionYAML representa uma transação simplificada para serialização YAML
@@ -115,6 +117,8 @@ func (w *Wallet) toYAML() WalletFile {
 			AveragePrice:       asset.AveragePrice.StringFixed(4),
 			TotalInvestedValue: asset.TotalInvestedValue.StringFixed(4),
 			Quantity:           asset.Quantity,
+			IsSubscription:     asset.IsSubscription,
+			SubscriptionOf:     asset.SubscriptionOf,
 		})
 	}
 
@@ -165,5 +169,16 @@ func (wf *WalletFile) toWallet() *Wallet {
 
 	// Criar Wallet a partir das transações
 	// Isso automaticamente recalcula todos os campos derivados
-	return NewWallet(transactions)
+	w := NewWallet(transactions)
+
+	// Restaurar metadados dos assets (IsSubscription, SubscriptionOf)
+	// que não são recalculados automaticamente
+	for _, ay := range wf.Assets {
+		if asset, exists := w.Assets[ay.Ticker]; exists {
+			asset.IsSubscription = ay.IsSubscription
+			asset.SubscriptionOf = ay.SubscriptionOf
+		}
+	}
+
+	return w
 }

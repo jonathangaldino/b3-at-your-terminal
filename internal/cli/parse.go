@@ -133,7 +133,7 @@ func displayResults(w *wallet.Wallet) {
 		fmt.Printf("  Negociações: %d\n", len(asset.Negotiations))
 		fmt.Printf("  Preço Médio: R$ %s\n", asset.AveragePrice.StringFixed(4))
 		fmt.Printf("  Valor Total Investido: R$ %s\n", asset.TotalInvestedValue.StringFixed(2))
-		fmt.Printf("  Quantidade em carteira: %s\n", asset.Quantity.StringFixed(0))
+		fmt.Printf("  Quantidade em carteira: %d\n", asset.Quantity)
 	}
 
 	fmt.Println("\n=== TRANSAÇÕES ===")

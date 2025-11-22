@@ -206,7 +206,7 @@ func TestCalculateQuantity(t *testing.T) {
 	tests := []struct {
 		name     string
 		asset    *Asset
-		expected string
+		expected int
 	}{
 		{
 			name: "Uma única compra",
@@ -218,7 +218,7 @@ func TestCalculateQuantity(t *testing.T) {
 					},
 				},
 			},
-			expected: "100.0000",
+			expected: 100,
 		},
 		{
 			name: "Múltiplas compras",
@@ -234,7 +234,7 @@ func TestCalculateQuantity(t *testing.T) {
 					},
 				},
 			},
-			expected: "150.0000",
+			expected: 150,
 		},
 		{
 			name: "Compras e vendas",
@@ -250,7 +250,7 @@ func TestCalculateQuantity(t *testing.T) {
 					},
 				},
 			},
-			expected: "70.0000",
+			expected: 70,
 		},
 		{
 			name: "Vendas maiores que compras (posição zerada ou vendida)",
@@ -266,17 +266,17 @@ func TestCalculateQuantity(t *testing.T) {
 					},
 				},
 			},
-			expected: "0.0000",
+			expected: 0,
 		},
 		{
 			name: "Sem transações",
 			asset: &Asset{
 				Negotiations: []parser.Transaction{},
 			},
-			expected: "0.0000",
+			expected: 0,
 		},
 		{
-			name: "Quantidades decimais (fracionário)",
+			name: "Quantidades decimais (fracionário) - arredondado para int",
 			asset: &Asset{
 				Negotiations: []parser.Transaction{
 					{
@@ -293,16 +293,15 @@ func TestCalculateQuantity(t *testing.T) {
 					},
 				},
 			},
-			expected: "12.0000",
+			expected: 12, // 10.5 + 5.25 - 3.75 = 12.0
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := calculateQuantity(tt.asset)
-			resultStr := result.StringFixed(4)
-			if resultStr != tt.expected {
-				t.Errorf("calculateQuantity() = %v, expected %v", resultStr, tt.expected)
+			if result != tt.expected {
+				t.Errorf("calculateQuantity() = %v, expected %v", result, tt.expected)
 			}
 		})
 	}
@@ -359,7 +358,7 @@ func TestCalculatorsIntegration(t *testing.T) {
 	}
 
 	// Quantidade: 100 + 50 - 30 = 120
-	if quantity.StringFixed(4) != "120.0000" {
-		t.Errorf("Quantity = %v, expected 120.0000", quantity.StringFixed(4))
+	if quantity != 120 {
+		t.Errorf("Quantity = %v, expected 120", quantity)
 	}
 }

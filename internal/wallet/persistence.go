@@ -18,7 +18,8 @@ type WalletFile struct {
 }
 
 // AssetYAML representa um ativo simplificado para serialização YAML
-// Valores numéricos são armazenados como strings para manter precisão decimal
+// Valores monetários são armazenados como strings para manter precisão decimal
+// Quantity é int pois representa quantidade inteira de papéis
 type AssetYAML struct {
 	Ticker             string `yaml:"ticker"`
 	Type               string `yaml:"type"`
@@ -26,7 +27,7 @@ type AssetYAML struct {
 	Segment            string `yaml:"segment,omitempty"`
 	AveragePrice       string `yaml:"average_price"`
 	TotalInvestedValue string `yaml:"total_invested_value"`
-	Quantity           string `yaml:"quantity"`
+	Quantity           int    `yaml:"quantity"`
 }
 
 // TransactionYAML representa uma transação simplificada para serialização YAML
@@ -113,7 +114,7 @@ func (w *Wallet) toYAML() WalletFile {
 			Segment:            asset.Segment,
 			AveragePrice:       asset.AveragePrice.StringFixed(4),
 			TotalInvestedValue: asset.TotalInvestedValue.StringFixed(4),
-			Quantity:           asset.Quantity.StringFixed(4),
+			Quantity:           asset.Quantity,
 		})
 	}
 

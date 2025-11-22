@@ -45,7 +45,8 @@ func calculateTotalInvestedValue(asset *Asset) decimal.Decimal {
 
 // calculateQuantity calcula a quantidade atual de papéis do ativo
 // Fórmula: (Σ compras) - (Σ vendas)
-func calculateQuantity(asset *Asset) decimal.Decimal {
+// Retorna um inteiro (arredondado)
+func calculateQuantity(asset *Asset) int {
 	quantity := decimal.Zero
 
 	for _, negotiation := range asset.Negotiations {
@@ -56,5 +57,6 @@ func calculateQuantity(asset *Asset) decimal.Decimal {
 		}
 	}
 
-	return quantity.Round(4)
+	// Converter para int (arredondando)
+	return int(quantity.Round(0).IntPart())
 }

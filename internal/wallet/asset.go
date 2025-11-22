@@ -34,5 +34,6 @@ type Asset struct {
 
 	// Quantity é a quantidade atual de papéis que o investidor possui
 	// Calculado como: (total de compras) - (total de vendas)
-	Quantity decimal.Decimal
+	// Arredondado para número inteiro
+	Quantity int
 }

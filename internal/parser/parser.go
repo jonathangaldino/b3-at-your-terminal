@@ -2,9 +2,9 @@ package parser
 
 import (
 	"fmt"
-	"strconv"
 	"time"
 
+	"github.com/shopspring/decimal"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -141,20 +141,23 @@ func parseDate(dateStr string) (time.Time, error) {
 	return t, nil
 }
 
-// parseFloat converte string para float64
+// parseFloat converte string para decimal.Decimal
 // Aceita tanto ponto quanto vírgula como separador decimal
-func parseFloat(str string) (float64, error) {
+// Mantém precisão de 4 casas decimais (padrão B3)
+func parseFloat(str string) (decimal.Decimal, error) {
 	// Remover espaços em branco
 	str = trimSpaces(str)
 
 	// Substituir vírgula por ponto (formato brasileiro → formato padrão)
 	str = replaceCommaWithDot(str)
 
-	val, err := strconv.ParseFloat(str, 64)
+	val, err := decimal.NewFromString(str)
 	if err != nil {
-		return 0, fmt.Errorf("valor numérico inválido: %w", err)
+		return decimal.Zero, fmt.Errorf("valor numérico inválido: %w", err)
 	}
-	return val, nil
+
+	// Arredondar para 4 casas decimais (precisão padrão B3)
+	return val.Round(4), nil
 }
 
 // replaceCommaWithDot substitui vírgula por ponto em strings numéricas

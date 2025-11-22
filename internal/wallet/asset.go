@@ -1,6 +1,9 @@
 package wallet
 
-import "github.com/john/b3-project/internal/parser"
+import (
+	"github.com/john/b3-project/internal/parser"
+	"github.com/shopspring/decimal"
+)
 
 // Asset representa um ativo financeiro (ação ou fundo imobiliário)
 type Asset struct {
@@ -23,5 +26,13 @@ type Asset struct {
 
 	// AveragePrice é o preço médio ponderado pago pelo ativo
 	// Calculado automaticamente baseado nas transações de compra
-	AveragePrice float64
+	AveragePrice decimal.Decimal
+
+	// TotalInvestedValue é o valor total investido neste ativo
+	// Calculado automaticamente baseado em todas as transações de compra
+	TotalInvestedValue decimal.Decimal
+
+	// Quantity é a quantidade atual de papéis que o investidor possui
+	// Calculado como: (total de compras) - (total de vendas)
+	Quantity decimal.Decimal
 }

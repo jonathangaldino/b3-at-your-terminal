@@ -1,6 +1,9 @@
 package wallet
 
-import "github.com/john/b3-project/internal/parser"
+import (
+	"github.com/john/b3-project/internal/parser"
+	"github.com/shopspring/decimal"
+)
 
 // Wallet representa a carteira de investimentos completa
 type Wallet struct {
@@ -43,7 +46,7 @@ func NewWallet(transactions []parser.Transaction) *Wallet {
 				Type:         "renda variável",
 				SubType:      "", // Usuário define manualmente
 				Segment:      "", // Usuário define manualmente
-				AveragePrice: 0,
+				AveragePrice: decimal.Zero,
 			}
 			w.Assets[t.Ticker] = asset
 		}
@@ -51,9 +54,20 @@ func NewWallet(transactions []parser.Transaction) *Wallet {
 		// Adicionar transação às negociações do asset
 		asset.Negotiations = append(asset.Negotiations, t)
 
-		// Recalcular preço médio
+		// Recalcular campos derivados
 		asset.AveragePrice = calculateAveragePrice(asset)
+		asset.TotalInvestedValue = calculateTotalInvestedValue(asset)
+		asset.Quantity = calculateQuantity(asset)
 	}
 
 	return w
+}
+
+// RecalculateAssets recalcula todos os campos derivados de todos os Assets
+func (w *Wallet) RecalculateAssets() {
+	for _, asset := range w.Assets {
+		asset.AveragePrice = calculateAveragePrice(asset)
+		asset.TotalInvestedValue = calculateTotalInvestedValue(asset)
+		asset.Quantity = calculateQuantity(asset)
+	}
 }

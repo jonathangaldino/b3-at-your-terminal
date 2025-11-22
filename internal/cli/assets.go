@@ -6,12 +6,9 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/john/b3-project/internal/config"
 	"github.com/john/b3-project/internal/wallet"
 	"github.com/spf13/cobra"
-)
-
-var (
-	assetsWalletPath string
 )
 
 var assetsCmd = &cobra.Command{
@@ -42,18 +39,17 @@ Este comando permite vincular o direito de subscrição ao ativo original.`,
 var assetsOverviewCmd = &cobra.Command{
 	Use:   "overview",
 	Short: "Exibe um resumo de todos os ativos da carteira",
-	Long: `Exibe uma visão geral de todos os ativos na carteira, mostrando:
+	Long: `Exibe uma visão geral de todos os ativos na carteira atual, mostrando:
 - Código de negociação (ticker)
 - Quantidade de ativos em carteira
 - Valor total investido (soma de todas as compras)
 - Preço médio ponderado
 
-A lista é ordenada alfabeticamente por ticker.`,
-	Example: `  # Visualizar todos os ativos
-  b3cli assets overview --wallet data
+A lista é ordenada alfabeticamente por ticker.
 
-  # Visualizar ativos no diretório atual
-  b3cli assets overview`,
+IMPORTANTE: Você deve ter aberto uma wallet antes de usar este comando.
+Use 'b3cli wallet open <diretório>' para abrir uma wallet.`,
+	Example: `  b3cli assets overview`,
 	Args: cobra.NoArgs,
 	RunE: runAssetsOverview,
 }
@@ -61,9 +57,6 @@ A lista é ordenada alfabeticamente por ticker.`,
 func init() {
 	assetsCmd.AddCommand(assetsSubscriptionCmd)
 	assetsCmd.AddCommand(assetsOverviewCmd)
-
-	assetsSubscriptionCmd.Flags().StringVarP(&assetsWalletPath, "wallet", "w", ".", "Diretório da wallet")
-	assetsOverviewCmd.Flags().StringVarP(&assetsWalletPath, "wallet", "w", ".", "Diretório da wallet")
 }
 
 func runAssetsSubscription(cmd *cobra.Command, args []string) error {
@@ -83,15 +76,15 @@ func runAssetsSubscription(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("o ativo não pode ser subscrição de si mesmo")
 	}
 
-	// Obter diretório da wallet (usar flag)
-	absPath, err := filepath.Abs(assetsWalletPath)
+	// Obter wallet atual
+	absPath, err := config.GetCurrentWallet()
 	if err != nil {
-		return fmt.Errorf("erro ao resolver caminho: %w", err)
+		return err
 	}
 
-	// Verificar se existe uma wallet
+	// Verificar se a wallet existe
 	if !wallet.Exists(absPath) {
-		return fmt.Errorf("não foi encontrada uma wallet em %s. Use 'b3cli wallet create' primeiro", absPath)
+		return fmt.Errorf("wallet não encontrada em %s", absPath)
 	}
 
 	// Carregar wallet
@@ -131,15 +124,15 @@ func runAssetsSubscription(cmd *cobra.Command, args []string) error {
 }
 
 func runAssetsOverview(cmd *cobra.Command, args []string) error {
-	// Obter diretório da wallet
-	absPath, err := filepath.Abs(assetsWalletPath)
+	// Obter wallet atual
+	absPath, err := config.GetCurrentWallet()
 	if err != nil {
-		return fmt.Errorf("erro ao resolver caminho: %w", err)
+		return err
 	}
 
-	// Verificar se existe uma wallet
+	// Verificar se a wallet existe
 	if !wallet.Exists(absPath) {
-		return fmt.Errorf("não foi encontrada uma wallet em %s. Use 'b3cli wallet create' primeiro", absPath)
+		return fmt.Errorf("wallet não encontrada em %s", absPath)
 	}
 
 	// Carregar wallet

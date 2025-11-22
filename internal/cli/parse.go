@@ -5,13 +5,10 @@ import (
 	"os"
 	"strings"
 
+	"github.com/john/b3-project/internal/config"
 	"github.com/john/b3-project/internal/parser"
 	"github.com/john/b3-project/internal/wallet"
 	"github.com/spf13/cobra"
-)
-
-var (
-	walletPath string
 )
 
 var parseCmd = &cobra.Command{
@@ -29,26 +26,28 @@ Os arquivos devem estar no formato esperado com as seguintes colunas:
 - Preço
 - Valor
 
-O comando automaticamente deduplica transações, atualiza a carteira (wallet)
+O comando automaticamente deduplica transações, atualiza a carteira atual
 e calcula os preços médios ponderados para cada ativo.
 
-IMPORTANTE: Você deve ter criado uma wallet antes de usar este comando.
-Use 'b3cli wallet create <diretório>' para criar uma nova wallet.`,
-	Example: `  b3cli parse --wallet . arquivo1.xlsx
-  b3cli parse --wallet ~/investimentos arquivo1.xlsx arquivo2.xlsx
-  b3cli parse --wallet . files/*.xlsx`,
+IMPORTANTE: Você deve ter aberto uma wallet antes de usar este comando.
+Use 'b3cli wallet open <diretório>' para abrir uma wallet.`,
+	Example: `  b3cli parse arquivo1.xlsx
+  b3cli parse arquivo1.xlsx arquivo2.xlsx
+  b3cli parse files/*.xlsx`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: runParse,
-}
-
-func init() {
-	parseCmd.Flags().StringVarP(&walletPath, "wallet", "w", ".", "Diretório da wallet")
 }
 
 func runParse(cmd *cobra.Command, args []string) error {
 	filePaths := args
 
-	// Verificar se existe uma wallet no diretório especificado
+	// Obter wallet atual
+	walletPath, err := config.GetCurrentWallet()
+	if err != nil {
+		return err
+	}
+
+	// Verificar se a wallet existe
 	if !wallet.Exists(walletPath) {
 		return fmt.Errorf("wallet não encontrada em %s\nCrie uma wallet primeiro: b3cli wallet create %s", walletPath, walletPath)
 	}

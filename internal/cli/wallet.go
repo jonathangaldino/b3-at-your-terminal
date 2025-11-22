@@ -92,7 +92,9 @@ func runWalletCreate(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("✓ Carteira criada com sucesso em: %s\n", absPath)
-	fmt.Printf("✓ Arquivo: %s\n", filepath.Join(absPath, "wallet.yaml"))
+	fmt.Printf("✓ Arquivos criados:\n")
+	fmt.Printf("  - %s\n", filepath.Join(absPath, "assets.yaml"))
+	fmt.Printf("  - %s\n", filepath.Join(absPath, "transactions.yaml"))
 	fmt.Println()
 	fmt.Println("Próximos passos:")
 	fmt.Printf("  1. Abra a carteira: b3cli wallet open %s\n", absPath)
@@ -122,9 +124,11 @@ func runWalletOpen(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("✓ Wallet aberta: %s\n", absPath)
-	fmt.Printf("✓ Arquivo de configuração: %s\n", filepath.Join(absPath, "wallet.yaml"))
+	fmt.Printf("✓ Arquivos:\n")
+	fmt.Printf("  - %s\n", filepath.Join(absPath, "assets.yaml"))
+	fmt.Printf("  - %s\n", filepath.Join(absPath, "transactions.yaml"))
 	fmt.Println()
-	fmt.Println("Agora você pode usar os comandos sem especificar --wallet:")
+	fmt.Println("Agora você pode usar os comandos sem especificar wallet:")
 	fmt.Println("  b3cli parse arquivos/*.xlsx")
 	fmt.Println("  b3cli assets overview")
 	fmt.Println("  b3cli assets subscription TICKER subscription@PARENT")

@@ -11,12 +11,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// WalletFile representa a estrutura do arquivo YAML da wallet
-type WalletFile struct {
-	Assets       []AssetYAML       `yaml:"assets"`
-	Transactions []TransactionYAML `yaml:"transactions"`
-}
-
 // AssetYAML representa um ativo simplificado para serialização YAML
 // Valores monetários são armazenados como strings para manter precisão decimal
 // Quantity é int pois representa quantidade inteira de papéis
@@ -45,71 +39,42 @@ type TransactionYAML struct {
 	Hash        string `yaml:"hash"`
 }
 
-// Save salva a wallet em um arquivo YAML
+// Save salva a wallet em arquivos YAML separados
+// - assets.yaml: contém a lista de ativos
+// - transactions.yaml: contém a lista de transações
 func (w *Wallet) Save(dirPath string) error {
 	// Criar diretório se não existir
 	if err := os.MkdirAll(dirPath, 0755); err != nil {
 		return err
 	}
 
-	// Converter Wallet para WalletFile
-	walletFile := w.toYAML()
-
-	// Serializar para YAML
-	data, err := yaml.Marshal(walletFile)
-	if err != nil {
+	// Salvar assets
+	if err := w.saveAssets(dirPath); err != nil {
 		return err
 	}
 
-	// Salvar arquivo
-	filePath := filepath.Join(dirPath, "wallet.yaml")
-	return os.WriteFile(filePath, data, 0644)
-}
-
-// Load carrega uma wallet de um arquivo YAML
-func Load(dirPath string) (*Wallet, error) {
-	filePath := filepath.Join(dirPath, "wallet.yaml")
-
-	// Ler arquivo
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		return nil, err
+	// Salvar transactions
+	if err := w.saveTransactions(dirPath); err != nil {
+		return err
 	}
 
-	// Deserializar YAML
-	var walletFile WalletFile
-	if err := yaml.Unmarshal(data, &walletFile); err != nil {
-		return nil, err
-	}
-
-	// Converter WalletFile para Wallet
-	return walletFile.toWallet(), nil
+	return nil
 }
 
-// Exists verifica se existe um arquivo wallet.yaml no diretório
-func Exists(dirPath string) bool {
-	filePath := filepath.Join(dirPath, "wallet.yaml")
-	_, err := os.Stat(filePath)
-	return err == nil
-}
-
-// toYAML converte Wallet para WalletFile (estrutura YAML)
-func (w *Wallet) toYAML() WalletFile {
-	wf := WalletFile{
-		Assets:       make([]AssetYAML, 0, len(w.Assets)),
-		Transactions: make([]TransactionYAML, 0, len(w.Transactions)),
-	}
-
-	// Converter Assets (ordenar por ticker)
+// saveAssets salva apenas os ativos em assets.yaml
+func (w *Wallet) saveAssets(dirPath string) error {
+	// Coletar e ordenar assets por ticker
 	tickers := make([]string, 0, len(w.Assets))
 	for ticker := range w.Assets {
 		tickers = append(tickers, ticker)
 	}
 	sort.Strings(tickers)
 
+	// Converter para AssetYAML
+	assetsYAML := make([]AssetYAML, 0, len(w.Assets))
 	for _, ticker := range tickers {
 		asset := w.Assets[ticker]
-		wf.Assets = append(wf.Assets, AssetYAML{
+		assetsYAML = append(assetsYAML, AssetYAML{
 			Ticker:             asset.ID,
 			Type:               asset.Type,
 			SubType:            asset.SubType,
@@ -122,15 +87,30 @@ func (w *Wallet) toYAML() WalletFile {
 		})
 	}
 
-	// Converter Transactions (ordenar por data, mais antigo primeiro)
+	// Serializar para YAML
+	data, err := yaml.Marshal(assetsYAML)
+	if err != nil {
+		return err
+	}
+
+	// Salvar arquivo
+	filePath := filepath.Join(dirPath, "assets.yaml")
+	return os.WriteFile(filePath, data, 0644)
+}
+
+// saveTransactions salva apenas as transações em transactions.yaml
+func (w *Wallet) saveTransactions(dirPath string) error {
+	// Ordenar transactions por data (mais antigo primeiro)
 	transactions := make([]parser.Transaction, len(w.Transactions))
 	copy(transactions, w.Transactions)
 	sort.Slice(transactions, func(i, j int) bool {
 		return transactions[i].Date.Before(transactions[j].Date)
 	})
 
+	// Converter para TransactionYAML
+	transactionsYAML := make([]TransactionYAML, 0, len(transactions))
 	for _, t := range transactions {
-		wf.Transactions = append(wf.Transactions, TransactionYAML{
+		transactionsYAML = append(transactionsYAML, TransactionYAML{
 			Date:        t.Date.Format("2006-01-02"),
 			Type:        t.Type,
 			Institution: t.Institution,
@@ -142,14 +122,66 @@ func (w *Wallet) toYAML() WalletFile {
 		})
 	}
 
-	return wf
+	// Serializar para YAML
+	data, err := yaml.Marshal(transactionsYAML)
+	if err != nil {
+		return err
+	}
+
+	// Salvar arquivo
+	filePath := filepath.Join(dirPath, "transactions.yaml")
+	return os.WriteFile(filePath, data, 0644)
 }
 
-// toWallet converte WalletFile (estrutura YAML) para Wallet
-func (wf *WalletFile) toWallet() *Wallet {
-	// Converter TransactionYAML para Transaction
-	transactions := make([]parser.Transaction, 0, len(wf.Transactions))
-	for _, ty := range wf.Transactions {
+// Load carrega uma wallet dos arquivos YAML separados
+func Load(dirPath string) (*Wallet, error) {
+	// Tentar migrar de formato antigo se necessário
+	if err := migrateOldFormat(dirPath); err != nil {
+		// Se falhar, continuar tentando carregar do novo formato
+	}
+
+	// Carregar transactions
+	transactions, err := loadTransactions(dirPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Criar Wallet a partir das transações
+	// Isso automaticamente recalcula todos os campos derivados
+	w := NewWallet(transactions)
+
+	// Carregar e restaurar metadados dos assets
+	if err := loadAssetsMetadata(dirPath, w); err != nil {
+		// Se não conseguir carregar assets.yaml, continuar mesmo assim
+		// (pode ser wallet antiga ou recém-criada)
+	}
+
+	return w, nil
+}
+
+// loadTransactions carrega as transações do arquivo transactions.yaml
+func loadTransactions(dirPath string) ([]parser.Transaction, error) {
+	filePath := filepath.Join(dirPath, "transactions.yaml")
+
+	// Ler arquivo
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		// Se não existir, retornar lista vazia
+		if os.IsNotExist(err) {
+			return []parser.Transaction{}, nil
+		}
+		return nil, err
+	}
+
+	// Deserializar YAML
+	var transactionsYAML []TransactionYAML
+	if err := yaml.Unmarshal(data, &transactionsYAML); err != nil {
+		return nil, err
+	}
+
+	// Converter para Transaction
+	transactions := make([]parser.Transaction, 0, len(transactionsYAML))
+	for _, ty := range transactionsYAML {
 		date, _ := time.Parse("2006-01-02", ty.Date)
 		quantity, _ := decimal.NewFromString(ty.Quantity)
 		price, _ := decimal.NewFromString(ty.Price)
@@ -167,18 +199,134 @@ func (wf *WalletFile) toWallet() *Wallet {
 		})
 	}
 
-	// Criar Wallet a partir das transações
-	// Isso automaticamente recalcula todos os campos derivados
-	w := NewWallet(transactions)
+	return transactions, nil
+}
 
-	// Restaurar metadados dos assets (IsSubscription, SubscriptionOf)
-	// que não são recalculados automaticamente
-	for _, ay := range wf.Assets {
+// loadAssetsMetadata carrega metadados dos assets do arquivo assets.yaml
+func loadAssetsMetadata(dirPath string, w *Wallet) error {
+	filePath := filepath.Join(dirPath, "assets.yaml")
+
+	// Ler arquivo
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return err
+	}
+
+	// Deserializar YAML
+	var assetsYAML []AssetYAML
+	if err := yaml.Unmarshal(data, &assetsYAML); err != nil {
+		return err
+	}
+
+	// Restaurar metadados que não são recalculados automaticamente
+	for _, ay := range assetsYAML {
 		if asset, exists := w.Assets[ay.Ticker]; exists {
 			asset.IsSubscription = ay.IsSubscription
 			asset.SubscriptionOf = ay.SubscriptionOf
+			asset.SubType = ay.SubType
+			asset.Segment = ay.Segment
 		}
 	}
 
-	return w
+	return nil
+}
+
+// Exists verifica se existe uma wallet válida no diretório
+// Uma wallet é considerada válida se existe o arquivo transactions.yaml ou wallet.yaml (formato antigo)
+func Exists(dirPath string) bool {
+	// Verificar novo formato
+	transactionsPath := filepath.Join(dirPath, "transactions.yaml")
+	if _, err := os.Stat(transactionsPath); err == nil {
+		return true
+	}
+
+	// Verificar formato antigo
+	oldWalletPath := filepath.Join(dirPath, "wallet.yaml")
+	if _, err := os.Stat(oldWalletPath); err == nil {
+		return true
+	}
+
+	return false
+}
+
+// WalletFile representa a estrutura do arquivo YAML antigo (wallet.yaml)
+type WalletFile struct {
+	Assets       []AssetYAML       `yaml:"assets"`
+	Transactions []TransactionYAML `yaml:"transactions"`
+}
+
+// migrateOldFormat migra automaticamente do formato antigo (wallet.yaml) para o novo formato
+// (assets.yaml + transactions.yaml) se necessário
+func migrateOldFormat(dirPath string) error {
+	oldWalletPath := filepath.Join(dirPath, "wallet.yaml")
+	newTransactionsPath := filepath.Join(dirPath, "transactions.yaml")
+
+	// Verificar se já existe no novo formato
+	if _, err := os.Stat(newTransactionsPath); err == nil {
+		// Já está no novo formato
+		return nil
+	}
+
+	// Verificar se existe wallet.yaml antigo
+	if _, err := os.Stat(oldWalletPath); os.IsNotExist(err) {
+		// Não existe formato antigo
+		return nil
+	}
+
+	// Carregar wallet.yaml antigo
+	data, err := os.ReadFile(oldWalletPath)
+	if err != nil {
+		return err
+	}
+
+	var walletFile WalletFile
+	if err := yaml.Unmarshal(data, &walletFile); err != nil {
+		return err
+	}
+
+	// Converter para transações
+	transactions := make([]parser.Transaction, 0, len(walletFile.Transactions))
+	for _, ty := range walletFile.Transactions {
+		date, _ := time.Parse("2006-01-02", ty.Date)
+		quantity, _ := decimal.NewFromString(ty.Quantity)
+		price, _ := decimal.NewFromString(ty.Price)
+		amount, _ := decimal.NewFromString(ty.Amount)
+
+		transactions = append(transactions, parser.Transaction{
+			Date:        date,
+			Type:        ty.Type,
+			Institution: ty.Institution,
+			Ticker:      ty.Ticker,
+			Quantity:    quantity,
+			Price:       price,
+			Amount:      amount,
+			Hash:        ty.Hash,
+		})
+	}
+
+	// Criar wallet a partir das transações
+	w := NewWallet(transactions)
+
+	// Restaurar metadados dos assets
+	for _, ay := range walletFile.Assets {
+		if asset, exists := w.Assets[ay.Ticker]; exists {
+			asset.IsSubscription = ay.IsSubscription
+			asset.SubscriptionOf = ay.SubscriptionOf
+			asset.SubType = ay.SubType
+			asset.Segment = ay.Segment
+		}
+	}
+
+	// Salvar no novo formato
+	if err := w.Save(dirPath); err != nil {
+		return err
+	}
+
+	// Renomear wallet.yaml antigo para wallet.yaml.bak
+	backupPath := filepath.Join(dirPath, "wallet.yaml.bak")
+	if err := os.Rename(oldWalletPath, backupPath); err != nil {
+		// Se não conseguir renomear, não é crítico
+	}
+
+	return nil
 }

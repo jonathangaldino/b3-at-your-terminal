@@ -240,6 +240,9 @@ func normalizeEarningType(rawType string) string {
 	if lower == "jcp" {
 		return "Juros Sobre Capital Próprio"
 	}
+	if contains(lower, "resgate") {
+		return "Resgate"
+	}
 
 	// Se não reconhecer, retornar o valor original (para que a validação pegue)
 	return normalized

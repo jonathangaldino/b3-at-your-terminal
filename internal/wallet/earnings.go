@@ -125,15 +125,16 @@ func ValidateEarning(e *parser.Earning) error {
 		return fmt.Errorf("type is required")
 	}
 
-	// Validate type is one of the three expected values
+	// Validate type is one of the four expected values
 	validTypes := map[string]bool{
 		"Rendimento":                   true,
 		"Dividendo":                    true,
 		"Juros Sobre Capital Próprio": true,
+		"Resgate":                      true,
 	}
 
 	if !validTypes[e.Type] {
-		return fmt.Errorf("type must be 'Rendimento', 'Dividendo', or 'Juros Sobre Capital Próprio' (received: '%s')", e.Type)
+		return fmt.Errorf("type must be 'Rendimento', 'Dividendo', 'Juros Sobre Capital Próprio', or 'Resgate' (received: '%s')", e.Type)
 	}
 
 	if e.Quantity.LessThanOrEqual(decimal.Zero) {

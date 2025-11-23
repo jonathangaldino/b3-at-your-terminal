@@ -25,4 +25,5 @@ func init() {
 	rootCmd.AddCommand(walletCmd)
 	rootCmd.AddCommand(assetsCmd)
 	rootCmd.AddCommand(earningsCmd)
+	rootCmd.AddCommand(eventsCmd)
 }

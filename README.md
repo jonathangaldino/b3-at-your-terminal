@@ -1,4 +1,4 @@
-# B3 Transaction Parser CLI
+# B3 At Your Terminal
 
 > **English speakers**: This is a CLI tool for parsing and analyzing financial transactions from B3 (Brasil, Bolsa, Balcão - the Brazilian stock exchange, similar to NASDAQ). The tool processes Excel files exported from B3 brokerage accounts, calculates weighted average prices, and helps manage investment portfolios. Documentation is in Portuguese as the tool is specific to the Brazilian market.
 
@@ -6,9 +6,10 @@
 
 ## 📊 Sobre o Projeto
 
-**B3CLI** é uma ferramenta de linha de comando desenvolvida em Go para processar e analisar transações financeiras da B3 (Brasil, Bolsa, Balcão).
+**B3 At Your Terminal** é uma ferramenta de linha de comando desenvolvida em Go para processar e analisar transações financeiras da B3 (Brasil, Bolsa, Balcão).
 
 A ferramenta permite que você:
+
 - 📁 Processe arquivos Excel (.xlsx) exportados da sua conta na B3
 - 💰 Calcule automaticamente o preço médio ponderado dos seus ativos
 - 📈 Visualize sua carteira de investimentos de forma organizada
@@ -50,6 +51,7 @@ sudo mv b3cli /usr/local/bin/
 ⚠️ **IMPORTANTE**: Esta CLI aceita **apenas arquivos .xlsx exportados diretamente da sua conta na B3** ou da sua corretora.
 
 Os arquivos devem conter as seguintes colunas:
+
 - Data do Negócio
 - Tipo de Movimentação (Compra/Venda)
 - Mercado
@@ -63,21 +65,25 @@ Os arquivos devem conter as seguintes colunas:
 ### Exemplos de Uso
 
 **Processar um único arquivo:**
+
 ```bash
 ./b3cli parse arquivos/compras-2024.xlsx
 ```
 
 **Processar múltiplos arquivos:**
+
 ```bash
 ./b3cli parse arquivos/compras-2023.xlsx arquivos/compras-2024.xlsx
 ```
 
 **Processar todos os arquivos de uma pasta:**
+
 ```bash
 ./b3cli parse files/*.xlsx
 ```
 
 **Processar apenas arquivos numerados:**
+
 ```bash
 ./b3cli parse files/[0-9]*.xlsx
 ```

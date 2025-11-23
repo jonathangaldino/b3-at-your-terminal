@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/john/b3-project/internal/config"
+	"github.com/john/b3-project/internal/parser"
 	"github.com/john/b3-project/internal/wallet"
 	"github.com/spf13/cobra"
 )
@@ -108,7 +109,7 @@ func init() {
 }
 
 func runAssetsSubscription(cmd *cobra.Command, args []string) error {
-	ticker := strings.ToUpper(args[0])
+	ticker := parser.NormalizeTicker(args[0])
 	subscriptionArg := args[1]
 
 	// Parse subscription@parent
@@ -117,7 +118,7 @@ func runAssetsSubscription(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("formato inválido. Use: subscription@<ticker-pai>")
 	}
 
-	parentTicker := strings.ToUpper(parts[1])
+	parentTicker := parser.NormalizeTicker(parts[1])
 
 	// Validar que os tickers são diferentes
 	if ticker == parentTicker {

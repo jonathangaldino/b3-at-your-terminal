@@ -316,7 +316,7 @@ func (m transactModel) renderSummary() string {
 	}
 
 	// Parse inputs
-	ticker := strings.ToUpper(strings.TrimSpace(m.inputs[0].Value()))
+	ticker := parser.NormalizeTicker(m.inputs[0].Value())
 	dateStr := strings.TrimSpace(m.inputs[1].Value())
 	quantityStr := strings.TrimSpace(m.inputs[2].Value())
 	priceStr := strings.TrimSpace(m.inputs[3].Value())
@@ -419,7 +419,7 @@ func (m transactModel) renderSummary() string {
 
 func (m *transactModel) saveTransaction() error {
 	// Parse inputs
-	ticker := strings.ToUpper(strings.TrimSpace(m.inputs[0].Value()))
+	ticker := parser.NormalizeTicker(m.inputs[0].Value())
 	dateStr := strings.TrimSpace(m.inputs[1].Value())
 	quantityStr := strings.TrimSpace(m.inputs[2].Value())
 	priceStr := strings.TrimSpace(m.inputs[3].Value())

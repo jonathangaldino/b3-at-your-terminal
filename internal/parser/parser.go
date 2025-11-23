@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/shopspring/decimal"
@@ -246,11 +247,26 @@ func normalizeFractionalCode(mercado, codigo string) string {
 		return codigo
 	}
 
+	// Usar normalização genérica
+	return NormalizeTicker(codigo)
+}
+
+// NormalizeTicker normaliza um ticker removendo o "F" do final se presente
+// O "F" indica mercado fracionário, mas representa a mesma empresa
+// Exemplo: KLBN3F -> KLBN3, ITSA4F -> ITSA4
+// Esta função é pública para ser usada em transações manuais e imports
+func NormalizeTicker(ticker string) string {
+	// Converter para maiúsculas
+	ticker = strings.ToUpper(ticker)
+
+	// Remover espaços
+	ticker = trimSpaces(ticker)
+
 	// Verificar se o código termina com "F"
-	if len(codigo) > 0 && codigo[len(codigo)-1] == 'F' {
+	if len(ticker) > 0 && ticker[len(ticker)-1] == 'F' {
 		// Remover o "F" do final
-		return codigo[:len(codigo)-1]
+		return ticker[:len(ticker)-1]
 	}
 
-	return codigo
+	return ticker
 }

@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/john/b3-project/internal/config"
+	"github.com/john/b3-project/internal/parser"
 	"github.com/john/b3-project/internal/wallet"
 	"github.com/spf13/cobra"
 )
@@ -27,6 +28,8 @@ type viewMode int
 const (
 	viewList viewMode = iota
 	viewEdit
+	viewConfirmMerge
+	viewConfirmCreate
 )
 
 // assetItem implementa list.Item para bubbles/list
@@ -46,17 +49,19 @@ func (i assetItem) Description() string {
 
 // model representa o estado da aplicação
 type model struct {
-	mode          viewMode
-	list          list.Model
-	wallet        *wallet.Wallet
-	walletPath    string
-	selectedAsset *wallet.Asset
-	typeInput     textinput.Model
-	subTypeInput  textinput.Model
-	segmentInput  textinput.Model
-	focusIndex    int
-	err           error
-	saved         bool
+	mode           viewMode
+	list           list.Model
+	wallet         *wallet.Wallet
+	walletPath     string
+	selectedAsset  *wallet.Asset
+	typeInput      textinput.Model
+	subTypeInput   textinput.Model
+	segmentInput   textinput.Model
+	focusIndex     int
+	err            error
+	saved          bool
+	mergeResult    *wallet.MergeResult
+	normalizedName string // Ticker sem F para confirmar criação
 }
 
 func initialModel(w *wallet.Wallet, walletPath string) model {
@@ -127,6 +132,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateListView(msg)
 		case viewEdit:
 			return m.updateEditView(msg)
+		case viewConfirmMerge:
+			return m.updateConfirmMergeView(msg)
+		case viewConfirmCreate:
+			return m.updateConfirmCreateView(msg)
 		}
 	}
 
@@ -175,7 +184,16 @@ func (m model) updateEditView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		m.mode = viewList
 		m.saved = false
+		m.err = nil
 		return m, nil
+
+	case "f", "F":
+		// Corrigir ativo fracionário (apenas se termina com F)
+		if wallet.IsFractionalTicker(m.selectedAsset.ID) {
+			m.mode = viewConfirmMerge
+			m.err = nil
+			return m, nil
+		}
 
 	case "tab", "shift+tab", "up", "down":
 		// Navegar entre inputs
@@ -233,6 +251,94 @@ func (m model) updateEditView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+func (m model) updateConfirmMergeView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
+		return m, tea.Quit
+
+	case "esc", "n", "N":
+		// Cancelar
+		m.mode = viewEdit
+		m.err = nil
+		return m, nil
+
+	case "y", "Y":
+		// Confirmar merge
+		result, err := m.wallet.MergeFractionalAsset(m.selectedAsset.ID)
+		if err != nil {
+			// Verificar se é erro de ativo não encontrado
+			if len(err.Error()) > 16 && err.Error()[:16] == "TARGET_NOT_FOUND" {
+				// Extrair ticker normalizado do erro
+				m.normalizedName = err.Error()[17:] // Pula "TARGET_NOT_FOUND:"
+				m.mode = viewConfirmCreate
+				return m, nil
+			}
+
+			m.err = err
+			return m, nil
+		}
+
+		// Merge bem-sucedido
+		m.mergeResult = result
+
+		// Salvar wallet
+		if err := m.wallet.Save(m.walletPath); err != nil {
+			m.err = err
+			return m, nil
+		}
+
+		m.saved = true
+
+		// Reconstruir lista de ativos para refletir as mudanças
+		m.rebuildAssetList()
+
+		m.mode = viewList
+		return m, nil
+	}
+
+	return m, nil
+}
+
+func (m model) updateConfirmCreateView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
+		return m, tea.Quit
+
+	case "esc", "n", "N":
+		// Cancelar
+		m.mode = viewEdit
+		m.err = nil
+		return m, nil
+
+	case "y", "Y":
+		// Criar e mesclar
+		result, err := m.wallet.CreateAndMergeFractionalAsset(m.selectedAsset.ID)
+		if err != nil {
+			m.err = err
+			return m, nil
+		}
+
+		// Merge bem-sucedido
+		m.mergeResult = result
+
+		// Salvar wallet
+		if err := m.wallet.Save(m.walletPath); err != nil {
+			m.err = err
+			return m, nil
+		}
+
+		m.saved = true
+
+		// Reconstruir lista de ativos para refletir as mudanças
+		m.rebuildAssetList()
+
+		m.mode = viewList
+		return m, nil
+	}
+
+	return m, nil
+}
+
 func (m *model) getInput(i int) *textinput.Model {
 	switch i {
 	case 0:
@@ -244,13 +350,49 @@ func (m *model) getInput(i int) *textinput.Model {
 	}
 }
 
+// rebuildAssetList reconstrói a lista de ativos a partir da wallet atual
+func (m *model) rebuildAssetList() {
+	// Criar nova lista de items
+	items := []list.Item{}
+	tickers := make([]string, 0, len(m.wallet.Assets))
+	for ticker := range m.wallet.Assets {
+		tickers = append(tickers, ticker)
+	}
+	sort.Strings(tickers)
+
+	for _, ticker := range tickers {
+		asset := m.wallet.Assets[ticker]
+		// Incluir apenas ativos com quantity >= 1
+		if asset.Quantity >= 1 {
+			items = append(items, assetItem{
+				ticker: ticker,
+				qty:    asset.Quantity,
+				pm:     asset.AveragePrice.StringFixed(4),
+			})
+		}
+	}
+
+	// Atualizar a lista
+	m.list.SetItems(items)
+
+	// Limpar seleção de asset
+	m.selectedAsset = nil
+}
+
 var docStyle = lipgloss.NewStyle().Margin(1, 2)
 
 func (m model) View() string {
-	if m.mode == viewList {
+	switch m.mode {
+	case viewList:
 		return m.viewList()
+	case viewEdit:
+		return m.viewEdit()
+	case viewConfirmMerge:
+		return m.viewConfirmMerge()
+	case viewConfirmCreate:
+		return m.viewConfirmCreate()
 	}
-	return m.viewEdit()
+	return ""
 }
 
 func (m model) viewList() string {
@@ -260,8 +402,20 @@ func (m model) viewList() string {
 	b.WriteString("\n\n")
 
 	if m.saved {
-		b.WriteString(selectedItemStyle.Render("✓ Ativo atualizado com sucesso!"))
-		b.WriteString("\n\n")
+		if m.mergeResult != nil {
+			b.WriteString(selectedItemStyle.Render("✓ Ativo fracionário corrigido com sucesso!"))
+			b.WriteString("\n")
+			b.WriteString(helpStyle.Render(fmt.Sprintf("   %s → %s (%d transações, %d proventos)",
+				m.mergeResult.SourceTicker,
+				m.mergeResult.TargetTicker,
+				m.mergeResult.TransactionsMoved,
+				m.mergeResult.EarningsMoved)))
+			b.WriteString("\n\n")
+			m.mergeResult = nil // Reset
+		} else {
+			b.WriteString(selectedItemStyle.Render("✓ Ativo atualizado com sucesso!"))
+			b.WriteString("\n\n")
+		}
 	}
 
 	b.WriteString(m.list.View())
@@ -312,7 +466,97 @@ func (m model) viewEdit() string {
 		b.WriteString("\n\n")
 	}
 
-	b.WriteString(helpStyle.Render("tab/↑/↓: navegar • enter: salvar • esc: voltar • ctrl+c: sair"))
+	// Mostrar botão de correção apenas para ativos fracionários
+	if wallet.IsFractionalTicker(m.selectedAsset.ID) {
+		warningStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("208"))
+		b.WriteString(warningStyle.Render("⚠ Este ativo tem 'F' no final (mercado fracionário)"))
+		b.WriteString("\n\n")
+	}
+
+	helpText := "tab/↑/↓: navegar • enter: salvar • esc: voltar"
+	if wallet.IsFractionalTicker(m.selectedAsset.ID) {
+		helpText += " • F: corrigir fracionário"
+	}
+	b.WriteString(helpStyle.Render(helpText))
+
+	return docStyle.Render(b.String())
+}
+
+func (m model) viewConfirmMerge() string {
+	var b strings.Builder
+
+	normalizedTicker := parser.NormalizeTicker(m.selectedAsset.ID)
+
+	b.WriteString(titleStyle.Render("Corrigir Ativo Fracionário"))
+	b.WriteString("\n\n")
+
+	warningStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("208"))
+	b.WriteString(warningStyle.Render(fmt.Sprintf("Você está prestes a corrigir: %s → %s", m.selectedAsset.ID, normalizedTicker)))
+	b.WriteString("\n\n")
+
+	b.WriteString("Esta operação irá:\n")
+	b.WriteString(fmt.Sprintf("  • Remover o 'F' do ticker (%s → %s)\n", m.selectedAsset.ID, normalizedTicker))
+	b.WriteString(fmt.Sprintf("  • Mesclar %d transações no ativo %s\n", len(m.selectedAsset.Negotiations), normalizedTicker))
+	if len(m.selectedAsset.Earnings) > 0 {
+		b.WriteString(fmt.Sprintf("  • Mesclar %d proventos no ativo %s\n", len(m.selectedAsset.Earnings), normalizedTicker))
+	}
+	b.WriteString(fmt.Sprintf("  • Recalcular preço médio e quantidade de %s\n", normalizedTicker))
+	b.WriteString(fmt.Sprintf("  • Remover o ativo %s da carteira\n", m.selectedAsset.ID))
+	b.WriteString("\n")
+
+	// Verificar se ativo de destino existe
+	if _, exists := m.wallet.Assets[normalizedTicker]; exists {
+		successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("82"))
+		b.WriteString(successStyle.Render(fmt.Sprintf("✓ O ativo %s já existe na carteira.", normalizedTicker)))
+		b.WriteString("\n")
+		b.WriteString("  As transações serão mescladas.\n")
+	} else {
+		b.WriteString(errorStyle.Render(fmt.Sprintf("⚠ O ativo %s NÃO existe na carteira.", normalizedTicker)))
+		b.WriteString("\n")
+		b.WriteString("  Você será perguntado se deseja criar.\n")
+	}
+
+	b.WriteString("\n")
+
+	if m.err != nil {
+		b.WriteString(errorStyle.Render(fmt.Sprintf("Erro: %s", m.err)))
+		b.WriteString("\n\n")
+	}
+
+	b.WriteString(helpStyle.Render("Y: confirmar • N/Esc: cancelar"))
+
+	return docStyle.Render(b.String())
+}
+
+func (m model) viewConfirmCreate() string {
+	var b strings.Builder
+
+	b.WriteString(titleStyle.Render("Criar Ativo Original?"))
+	b.WriteString("\n\n")
+
+	warningStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("208"))
+	b.WriteString(warningStyle.Render(fmt.Sprintf("O ativo %s não existe na carteira.", m.normalizedName)))
+	b.WriteString("\n\n")
+
+	b.WriteString("Deseja criar o ativo e mesclar as transações?\n\n")
+
+	b.WriteString("O novo ativo terá:\n")
+	b.WriteString(fmt.Sprintf("  • Ticker: %s\n", m.normalizedName))
+	b.WriteString(fmt.Sprintf("  • %d transações de %s\n", len(m.selectedAsset.Negotiations), m.selectedAsset.ID))
+	if len(m.selectedAsset.Earnings) > 0 {
+		b.WriteString(fmt.Sprintf("  • %d proventos de %s\n", len(m.selectedAsset.Earnings), m.selectedAsset.ID))
+	}
+	b.WriteString(fmt.Sprintf("  • Type: %s\n", m.selectedAsset.Type))
+	b.WriteString(fmt.Sprintf("  • SubType: %s\n", m.selectedAsset.SubType))
+	b.WriteString(fmt.Sprintf("  • Segment: %s\n", m.selectedAsset.Segment))
+	b.WriteString("\n")
+
+	if m.err != nil {
+		b.WriteString(errorStyle.Render(fmt.Sprintf("Erro: %s", m.err)))
+		b.WriteString("\n\n")
+	}
+
+	b.WriteString(helpStyle.Render("Y: criar e mesclar • N/Esc: cancelar"))
 
 	return docStyle.Render(b.String())
 }

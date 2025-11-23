@@ -19,11 +19,16 @@ A ferramenta permite que você:
 ## ✨ Funcionalidades
 
 - ✅ **Parser de arquivos .xlsx** - Lê arquivos Excel exportados diretamente da B3
+- ✅ **Detecção automática de tipo** - Identifica automaticamente se o arquivo é de transações ou proventos
 - ✅ **Cálculo automático de preço médio** - Calcula o custo médio ponderado de cada ativo
+- ✅ **Gestão de proventos** - Acompanhe dividendos, rendimentos, JCP e resgates recebidos
+- ✅ **Interface interativa colorida** - Terminal UI moderno com Bubble Tea
+- ✅ **Relatórios de proventos** - Visualize seus ganhos passivos por ano ou mês
 - ✅ **Deduplicação inteligente** - Usa hash SHA256 para identificar e eliminar transações duplicadas
 - ✅ **Normalização de códigos** - Unifica ativos do mercado fracionário (remove "F" quando aplicável)
 - ✅ **Carteira consolidada** - Visualize todos os seus ativos em um único lugar
 - ✅ **Suporte a múltiplos arquivos** - Processe vários períodos de uma só vez
+- ✅ **Compra/Venda manual** - Registre transações manualmente através de interface interativa
 
 ## 🚀 Como Usar
 
@@ -50,8 +55,7 @@ sudo mv b3cli /usr/local/bin/
 
 ⚠️ **IMPORTANTE**: Esta CLI aceita **apenas arquivos .xlsx exportados diretamente da sua conta na B3** ou da sua corretora.
 
-Os arquivos devem conter as seguintes colunas:
-
+#### Arquivos de Transações (9 colunas):
 - Data do Negócio
 - Tipo de Movimentação (Compra/Venda)
 - Mercado
@@ -61,6 +65,18 @@ Os arquivos devem conter as seguintes colunas:
 - Quantidade
 - Preço
 - Valor
+
+#### Arquivos de Proventos (8 colunas):
+- Entrada/Saída
+- Data
+- Movimentação (Rendimento/Dividendo/Juros Sobre Capital Próprio/Resgate)
+- Produto (formato: TICKER - Nome da empresa)
+- Instituição
+- Quantidade
+- Preço unitário
+- Valor da Operação
+
+💡 **Dica**: O comando `parse` detecta automaticamente o tipo de arquivo e processa adequadamente!
 
 ### Exemplos de Uso
 
@@ -88,39 +104,51 @@ Os arquivos devem conter as seguintes colunas:
 ./b3cli parse files/[0-9]*.xlsx
 ```
 
-### Exemplo de Saída
+### Comandos Principais
 
+**Gestão de Carteira:**
+```bash
+b3cli wallet create ./minha-carteira    # Criar nova carteira
+b3cli wallet open ./minha-carteira      # Abrir carteira existente
+b3cli wallet current                     # Ver carteira atual
+b3cli wallet close                       # Fechar carteira
 ```
-Processando 7 arquivo(s)...
 
-=== RESUMO ===
-Total de transações únicas: 191
-Total de ativos diferentes: 22
-
-=== ATIVOS ===
-
-[ITSA4] - renda variável
-  Negociações: 13
-  Preço Médio: R$ 10.18
-  Quantidade em carteira: 150
-
-[BCFF11] - renda variável
-  Negociações: 4
-  Preço Médio: R$ 86.96
-  Quantidade em carteira: 25
-
-[BBAS3] - renda variável
-  Negociações: 10
-  Preço Médio: R$ 27.64
-  Quantidade em carteira: 103
-
-=== TRANSAÇÕES ===
-Hash                 | Data       | Tipo   | Ticker | Qtd    | Preço   | Valor
---------------------------------------------------------------------------------
-2d512e793528d6f5...  | 08/09/2020 | Compra | ITSA4  |     10 |    9.61 |   96.10
-24253c8131a40951...  | 02/09/2020 | Compra | BCFF11 |      1 |   90.30 |   90.30
-...
+**Importação de Dados:**
+```bash
+b3cli parse transacoes.xlsx             # Importar transações
+b3cli parse proventos.xlsx              # Importar proventos
+b3cli parse *.xlsx                      # Processar todos os arquivos
 ```
+
+**Visualização de Ativos:**
+```bash
+b3cli assets overview                   # Ver ativos em carteira (TUI colorido)
+b3cli assets sold                       # Ver ativos vendidos (TUI colorido)
+b3cli assets manage                     # Gerenciar metadados (TUI interativo)
+```
+
+**Transações Manuais:**
+```bash
+b3cli assets buy                        # Registrar compra (TUI interativo)
+b3cli assets sell                       # Registrar venda (TUI interativo)
+```
+
+**Proventos:**
+```bash
+b3cli earnings parse proventos.xlsx     # Importar proventos
+b3cli earnings overview                 # Resumo por tipo (TUI colorido)
+b3cli earnings reports                  # Relatórios anuais/mensais (TUI interativo)
+```
+
+### Interface Moderna
+
+Todos os comandos de visualização utilizam uma **interface terminal interativa colorida** (Bubble Tea):
+
+- 🎨 **Cores e emojis** para facilitar leitura
+- ⌨️ **Navegação com teclado** (↑/↓, Enter, ESC, q)
+- 📊 **Visualizações organizadas** por tipo, segmento e categoria
+- 💡 **Informações contextuais** e dicas úteis
 
 ## 📁 Estrutura do Projeto
 
@@ -160,7 +188,10 @@ O projeto foi desenvolvido seguindo princípios de **separação de responsabili
 
 - **Go 1.24** - Linguagem principal
 - **Cobra** - Framework para CLI
+- **Bubble Tea** - Framework para Terminal UI interativo
+- **Lipgloss** - Estilização e cores para terminal
 - **Excelize** - Biblioteca para leitura de arquivos Excel (.xlsx)
+- **Decimal** (shopspring/decimal) - Precisão em cálculos financeiros
 - **SHA256** - Algoritmo de hash para deduplicação
 
 ## 🔒 Privacidade e Segurança

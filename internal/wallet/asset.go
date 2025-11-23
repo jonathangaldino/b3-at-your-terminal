@@ -13,6 +13,13 @@ type Asset struct {
 	// Negotiations são todas as negociações (compra/venda) feitas com esse ativo
 	Negotiations []parser.Transaction
 
+	// Earnings são todos os proventos (rendimentos, dividendos, JCP) recebidos deste ativo
+	Earnings []parser.Earning
+
+	// TotalEarnings é o valor total de proventos recebidos deste ativo
+	// Calculado automaticamente baseado em todos os earnings
+	TotalEarnings decimal.Decimal
+
 	// Type representa o tipo de ativo - sempre será "renda variável"
 	Type string
 

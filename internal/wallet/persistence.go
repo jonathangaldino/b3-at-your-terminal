@@ -39,10 +39,23 @@ type TransactionYAML struct {
 	Hash        string `yaml:"hash"`
 }
 
+// EarningYAML representa um provento simplificado para serialização YAML
+// Valores numéricos são armazenados como strings para manter precisão decimal
+type EarningYAML struct {
+	Date        string `yaml:"date"`
+	Type        string `yaml:"type"`
+	Ticker      string `yaml:"ticker"`
+	Quantity    string `yaml:"quantity"`
+	UnitPrice   string `yaml:"unit_price"`
+	TotalAmount string `yaml:"total_amount"`
+	Hash        string `yaml:"hash"`
+}
+
 // Save salva a wallet em arquivos YAML separados
 // - assets.yaml: contém apenas ativos ativos (quantity != 0)
 // - sold-assets.yaml: contém ativos vendidos completamente (quantity == 0)
 // - transactions.yaml: contém a lista de transações
+// - earnings.yaml: contém a lista de proventos recebidos
 func (w *Wallet) Save(dirPath string) error {
 	// Criar diretório se não existir
 	if err := os.MkdirAll(dirPath, 0755); err != nil {
@@ -56,6 +69,11 @@ func (w *Wallet) Save(dirPath string) error {
 
 	// Salvar transactions
 	if err := w.saveTransactions(dirPath); err != nil {
+		return err
+	}
+
+	// Salvar earnings
+	if err := w.saveEarnings(dirPath); err != nil {
 		return err
 	}
 
@@ -168,6 +186,51 @@ func (w *Wallet) saveTransactions(dirPath string) error {
 	return os.WriteFile(filePath, data, 0644)
 }
 
+// saveEarnings salva os proventos em earnings.yaml
+func (w *Wallet) saveEarnings(dirPath string) error {
+	// Coletar todos os earnings de todos os assets
+	var allEarnings []parser.Earning
+	for _, asset := range w.Assets {
+		allEarnings = append(allEarnings, asset.Earnings...)
+	}
+
+	// Se não houver earnings, remover o arquivo se existir
+	if len(allEarnings) == 0 {
+		filePath := filepath.Join(dirPath, "earnings.yaml")
+		os.Remove(filePath)
+		return nil
+	}
+
+	// Ordenar earnings por data (mais antigo primeiro)
+	sort.Slice(allEarnings, func(i, j int) bool {
+		return allEarnings[i].Date.Before(allEarnings[j].Date)
+	})
+
+	// Converter para EarningYAML
+	earningsYAML := make([]EarningYAML, 0, len(allEarnings))
+	for _, e := range allEarnings {
+		earningsYAML = append(earningsYAML, EarningYAML{
+			Date:        e.Date.Format("2006-01-02"),
+			Type:        e.Type,
+			Ticker:      e.Ticker,
+			Quantity:    e.Quantity.StringFixed(4),
+			UnitPrice:   e.UnitPrice.StringFixed(4),
+			TotalAmount: e.TotalAmount.StringFixed(4),
+			Hash:        e.Hash,
+		})
+	}
+
+	// Serializar para YAML
+	data, err := yaml.Marshal(earningsYAML)
+	if err != nil {
+		return err
+	}
+
+	// Salvar arquivo
+	filePath := filepath.Join(dirPath, "earnings.yaml")
+	return os.WriteFile(filePath, data, 0644)
+}
+
 // Load carrega uma wallet dos arquivos YAML separados
 func Load(dirPath string) (*Wallet, error) {
 	// Tentar migrar de formato antigo se necessário
@@ -189,6 +252,12 @@ func Load(dirPath string) (*Wallet, error) {
 	if err := loadAssetsMetadata(dirPath, w); err != nil {
 		// Se não conseguir carregar assets.yaml, continuar mesmo assim
 		// (pode ser wallet antiga ou recém-criada)
+	}
+
+	// Carregar earnings e associar aos assets
+	if err := loadEarnings(dirPath, w); err != nil {
+		// Se não conseguir carregar earnings.yaml, continuar mesmo assim
+		// (pode ser wallet antiga ou sem proventos ainda)
 	}
 
 	return w, nil
@@ -270,6 +339,68 @@ func loadAssetsMetadata(dirPath string, w *Wallet) error {
 			}
 		}
 	}
+
+	return nil
+}
+
+// loadEarnings carrega os proventos do arquivo earnings.yaml e os associa aos assets
+func loadEarnings(dirPath string, w *Wallet) error {
+	filePath := filepath.Join(dirPath, "earnings.yaml")
+
+	// Ler arquivo
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		// Se não existir, retornar nil (não é erro crítico)
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+
+	// Deserializar YAML
+	var earningsYAML []EarningYAML
+	if err := yaml.Unmarshal(data, &earningsYAML); err != nil {
+		return err
+	}
+
+	// Converter para Earning e associar aos assets
+	for _, ey := range earningsYAML {
+		date, _ := time.Parse("2006-01-02", ey.Date)
+		quantity, _ := decimal.NewFromString(ey.Quantity)
+		unitPrice, _ := decimal.NewFromString(ey.UnitPrice)
+		totalAmount, _ := decimal.NewFromString(ey.TotalAmount)
+
+		earning := parser.Earning{
+			Date:        date,
+			Type:        ey.Type,
+			Ticker:      ey.Ticker,
+			Quantity:    quantity,
+			UnitPrice:   unitPrice,
+			TotalAmount: totalAmount,
+			Hash:        ey.Hash,
+		}
+
+		// Associar ao asset correspondente
+		asset, exists := w.Assets[earning.Ticker]
+		if !exists {
+			// Criar asset se não existir (caso o asset tenha apenas earnings mas nenhuma transação)
+			asset = &Asset{
+				ID:           earning.Ticker,
+				Negotiations: make([]parser.Transaction, 0),
+				Earnings:     make([]parser.Earning, 0),
+				Type:         "renda variável",
+				SubType:      "",
+				Segment:      "",
+			}
+			w.Assets[earning.Ticker] = asset
+		}
+
+		// Adicionar earning ao asset
+		asset.Earnings = append(asset.Earnings, earning)
+	}
+
+	// Recalcular TotalEarnings para todos os assets
+	w.RecalculateAssets()
 
 	return nil
 }

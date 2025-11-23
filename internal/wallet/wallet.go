@@ -71,6 +71,7 @@ func (w *Wallet) RecalculateAssets() {
 		asset.AveragePrice = calculateAveragePrice(asset)
 		asset.TotalInvestedValue = calculateTotalInvestedValue(asset)
 		asset.Quantity = calculateQuantity(asset)
+		asset.TotalEarnings = calculateTotalEarnings(asset)
 	}
 }
 

@@ -8,6 +8,56 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
+// FileType representa o tipo de arquivo Excel da B3
+type FileType int
+
+const (
+	FileTypeUnknown FileType = iota
+	FileTypeTransactions
+	FileTypeEarnings
+)
+
+// DetectFileType detecta automaticamente se um arquivo é de transações ou proventos
+// baseado no número de colunas da primeira linha de dados
+func DetectFileType(filePath string) (FileType, error) {
+	f, err := excelize.OpenFile(filePath)
+	if err != nil {
+		return FileTypeUnknown, fmt.Errorf("erro ao abrir arquivo: %w", err)
+	}
+	defer f.Close()
+
+	// Obter a primeira sheet
+	sheets := f.GetSheetList()
+	if len(sheets) == 0 {
+		return FileTypeUnknown, fmt.Errorf("arquivo não contém sheets")
+	}
+	sheetName := sheets[0]
+
+	// Obter todas as linhas
+	rows, err := f.GetRows(sheetName)
+	if err != nil {
+		return FileTypeUnknown, fmt.Errorf("erro ao ler linhas: %w", err)
+	}
+
+	if len(rows) <= 1 {
+		return FileTypeUnknown, fmt.Errorf("arquivo não contém dados (apenas cabeçalho ou vazio)")
+	}
+
+	// Verificar número de colunas da primeira linha de dados (linha 2)
+	firstDataRow := rows[1]
+	numCols := len(firstDataRow)
+
+	// 9 colunas = transações
+	// 8 colunas = proventos
+	if numCols >= 9 {
+		return FileTypeTransactions, nil
+	} else if numCols >= 8 {
+		return FileTypeEarnings, nil
+	}
+
+	return FileTypeUnknown, fmt.Errorf("número de colunas não reconhecido: %d (esperado 8 ou 9)", numCols)
+}
+
 // ParseFiles processa múltiplos arquivos .xlsx e retorna todas as transações encontradas
 // Automaticamente deduplica transações usando hash SHA256
 func ParseFiles(filePaths []string) ([]Transaction, error) {

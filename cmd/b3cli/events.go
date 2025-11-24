@@ -2,7 +2,6 @@ package main
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/john/b3-project/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -67,14 +66,14 @@ func init() {
 }
 
 func runEventsGrouping(cmd *cobra.Command, args []string) error {
-	walletPath, err := config.GetCurrentWallet()
+	w, err := getOrLoadWallet()
 	if err != nil {
 		return err
 	}
 
 	// Launch interactive TUI
 	p := tea.NewProgram(
-		newGroupingModel(walletPath),
+		newGroupingModel(w, w.GetDirPath()),
 		tea.WithAltScreen(),
 	)
 
@@ -86,14 +85,14 @@ func runEventsGrouping(cmd *cobra.Command, args []string) error {
 }
 
 func runEventsSplit(cmd *cobra.Command, args []string) error {
-	walletPath, err := config.GetCurrentWallet()
+	w, err := getOrLoadWallet()
 	if err != nil {
 		return err
 	}
 
 	// Launch interactive TUI
 	p := tea.NewProgram(
-		newSplitModel(walletPath),
+		newSplitModel(w, w.GetDirPath()),
 		tea.WithAltScreen(),
 	)
 

@@ -50,13 +50,11 @@ func (i splitAssetItem) Description() string {
 	return fmt.Sprintf("Average Price: R$ %s", i.price)
 }
 
-func newSplitModel(walletPath string) splitModel {
-	// Load wallet
-	w, err := wallet.Load(walletPath)
-	if err != nil {
+func newSplitModel(w *wallet.Wallet, walletPath string) splitModel {
+	if w == nil {
 		return splitModel{
 			walletPath: walletPath,
-			err:        fmt.Errorf("failed to load wallet: %w", err),
+			err:        fmt.Errorf("wallet is nil"),
 		}
 	}
 

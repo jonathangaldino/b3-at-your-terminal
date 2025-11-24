@@ -5,7 +5,6 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/john/b3-project/internal/config"
 	"github.com/john/b3-project/internal/parser"
 	"github.com/john/b3-project/internal/wallet"
 	"github.com/shopspring/decimal"
@@ -60,17 +59,6 @@ Use 'b3cli wallet open <diretório>' para abrir uma wallet.`,
 func runEarningsParse(cmd *cobra.Command, args []string) error {
 	filePaths := args
 
-	// Obter wallet atual
-	walletPath, err := config.GetCurrentWallet()
-	if err != nil {
-		return err
-	}
-
-	// Verificar se a wallet existe
-	if !wallet.Exists(walletPath) {
-		return fmt.Errorf("wallet não encontrada em %s\nCrie uma wallet primeiro: b3cli wallet create %s", walletPath, walletPath)
-	}
-
 	// Validar que todos os arquivos existem
 	for _, filePath := range filePaths {
 		if _, err := os.Stat(filePath); os.IsNotExist(err) {
@@ -78,12 +66,13 @@ func runEarningsParse(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Carregar wallet existente
-	fmt.Printf("Carregando wallet de: %s\n", walletPath)
-	w, err := wallet.Load(walletPath)
+	// Get or load wallet (will prompt for password if locked)
+	w, err := getOrLoadWallet()
 	if err != nil {
-		return fmt.Errorf("erro ao carregar wallet: %w", err)
+		return err
 	}
+
+	walletPath := w.GetDirPath()
 
 	// Contar earnings antes
 	earningsBefore := countTotalEarnings(w)
@@ -302,21 +291,10 @@ Mostra para cada categoria (Rendimento, Dividendo, JCP, Resgate):
 }
 
 func runEarningsOverview(cmd *cobra.Command, args []string) error {
-	// Obter wallet atual
-	walletPath, err := config.GetCurrentWallet()
+	// Get or load wallet (will prompt for password if locked)
+	w, err := getOrLoadWallet()
 	if err != nil {
 		return err
-	}
-
-	// Verificar se a wallet existe
-	if !wallet.Exists(walletPath) {
-		return fmt.Errorf("wallet não encontrada em %s\nCrie uma wallet primeiro: b3cli wallet create %s", walletPath, walletPath)
-	}
-
-	// Carregar wallet
-	w, err := wallet.Load(walletPath)
-	if err != nil {
-		return fmt.Errorf("erro ao carregar wallet: %w", err)
 	}
 
 	// Verificar se há proventos
@@ -352,21 +330,10 @@ Permite visualizar proventos de forma:
 }
 
 func runEarningsReports(cmd *cobra.Command, args []string) error {
-	// Obter wallet atual
-	walletPath, err := config.GetCurrentWallet()
+	// Get or load wallet (will prompt for password if locked)
+	w, err := getOrLoadWallet()
 	if err != nil {
 		return err
-	}
-
-	// Verificar se a wallet existe
-	if !wallet.Exists(walletPath) {
-		return fmt.Errorf("wallet não encontrada em %s\nCrie uma wallet primeiro: b3cli wallet create %s", walletPath, walletPath)
-	}
-
-	// Carregar wallet
-	w, err := wallet.Load(walletPath)
-	if err != nil {
-		return fmt.Errorf("erro ao carregar wallet: %w", err)
 	}
 
 	// Verificar se há proventos

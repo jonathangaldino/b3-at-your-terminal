@@ -2,13 +2,10 @@ package main
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/john/b3-project/internal/config"
 	"github.com/john/b3-project/internal/parser"
-	"github.com/john/b3-project/internal/wallet"
 	"github.com/spf13/cobra"
 )
 
@@ -125,21 +122,10 @@ func runAssetsSubscription(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("o ativo não pode ser subscrição de si mesmo")
 	}
 
-	// Obter wallet atual
-	absPath, err := config.GetCurrentWallet()
+	// Get or load wallet (will prompt for password if locked)
+	w, err := getOrLoadWallet()
 	if err != nil {
 		return err
-	}
-
-	// Verificar se a wallet existe
-	if !wallet.Exists(absPath) {
-		return fmt.Errorf("wallet não encontrada em %s", absPath)
-	}
-
-	// Carregar wallet
-	w, err := wallet.Load(absPath)
-	if err != nil {
-		return fmt.Errorf("erro ao carregar wallet: %w", err)
 	}
 
 	// Converter subscrição para ativo pai
@@ -150,7 +136,7 @@ func runAssetsSubscription(cmd *cobra.Command, args []string) error {
 	}
 
 	// Salvar wallet
-	if err := w.Save(absPath); err != nil {
+	if err := w.Save(w.GetDirPath()); err != nil {
 		return fmt.Errorf("erro ao salvar wallet: %w", err)
 	}
 
@@ -167,27 +153,16 @@ func runAssetsSubscription(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  - Quantidade depois: %d\n", result.ParentQuantityAfter)
 	fmt.Printf("  - Preço médio: R$ %s\n", result.ParentAveragePrice.StringFixed(4))
 	fmt.Println()
-	fmt.Printf("✓ Wallet atualizada em: %s\n", filepath.Join(absPath, "wallet.yaml"))
+	fmt.Printf("✓ Wallet atualizada em: %s\n", w.GetDirPath())
 
 	return nil
 }
 
 func runAssetsOverview(cmd *cobra.Command, args []string) error {
-	// Obter wallet atual
-	absPath, err := config.GetCurrentWallet()
+	// Get or load wallet (will prompt for password if locked)
+	w, err := getOrLoadWallet()
 	if err != nil {
 		return err
-	}
-
-	// Verificar se a wallet existe
-	if !wallet.Exists(absPath) {
-		return fmt.Errorf("wallet não encontrada em %s", absPath)
-	}
-
-	// Carregar wallet
-	w, err := wallet.Load(absPath)
-	if err != nil {
-		return fmt.Errorf("erro ao carregar wallet: %w", err)
 	}
 
 	// Get active assets using wallet method
@@ -215,21 +190,10 @@ func runAssetsOverview(cmd *cobra.Command, args []string) error {
 }
 
 func runAssetsSold(cmd *cobra.Command, args []string) error {
-	// Obter wallet atual
-	absPath, err := config.GetCurrentWallet()
+	// Get or load wallet (will prompt for password if locked)
+	w, err := getOrLoadWallet()
 	if err != nil {
 		return err
-	}
-
-	// Verificar se a wallet existe
-	if !wallet.Exists(absPath) {
-		return fmt.Errorf("wallet não encontrada em %s", absPath)
-	}
-
-	// Carregar wallet
-	w, err := wallet.Load(absPath)
-	if err != nil {
-		return fmt.Errorf("erro ao carregar wallet: %w", err)
 	}
 
 	// Get sold assets using wallet method

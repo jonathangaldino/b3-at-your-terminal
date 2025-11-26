@@ -1,3 +1,6 @@
 files/*.xlsx
 data/
 /b3cli
+
+coverage.html
+coverage.out

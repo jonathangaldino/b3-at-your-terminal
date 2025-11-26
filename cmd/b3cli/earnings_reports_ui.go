@@ -29,7 +29,7 @@ type reportsModel struct {
 }
 
 var (
-	reportTitleStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205")).MarginBottom(1)
+	reportTitleStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205")).MarginBottom(1)
 	reportSelectedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("170")).Bold(true)
 	reportNormalStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
 	reportHelpStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("241")).MarginTop(1)

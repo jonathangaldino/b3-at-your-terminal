@@ -53,7 +53,7 @@ var (
 			MarginTop(1)
 
 	assetsLabelStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("252"))
+				Foreground(lipgloss.Color("252"))
 
 	assetsHelpStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("241")).

@@ -8,13 +8,13 @@ import (
 
 // MergeResult contém os resultados de uma operação de merge
 type MergeResult struct {
-	SourceTicker          string
-	TargetTicker          string
-	TransactionsMoved     int
-	EarningsMoved         int
-	TargetCreated         bool
-	TargetQuantityBefore  int
-	TargetQuantityAfter   int
+	SourceTicker         string
+	TargetTicker         string
+	TransactionsMoved    int
+	EarningsMoved        int
+	TargetCreated        bool
+	TargetQuantityBefore int
+	TargetQuantityAfter  int
 }
 
 // MergeFractionalAsset mescla um ativo fracionário (com F) no ativo original

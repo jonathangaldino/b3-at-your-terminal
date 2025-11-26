@@ -46,21 +46,21 @@ automaticamente nesta carteira sem precisar especificar o caminho.`,
 }
 
 var walletCurrentCmd = &cobra.Command{
-	Use:   "current",
-	Short: "Mostra qual carteira está aberta atualmente",
-	Long:  `Exibe o caminho da carteira que está atualmente aberta e sendo usada pelos comandos.`,
+	Use:     "current",
+	Short:   "Mostra qual carteira está aberta atualmente",
+	Long:    `Exibe o caminho da carteira que está atualmente aberta e sendo usada pelos comandos.`,
 	Example: `  b3cli wallet current`,
-	Args: cobra.NoArgs,
-	RunE: runWalletCurrent,
+	Args:    cobra.NoArgs,
+	RunE:    runWalletCurrent,
 }
 
 var walletCloseCmd = &cobra.Command{
-	Use:   "close",
-	Short: "Fecha a carteira atual",
-	Long:  `Fecha a carteira atual. Após executar este comando, será necessário abrir uma carteira novamente.`,
+	Use:     "close",
+	Short:   "Fecha a carteira atual",
+	Long:    `Fecha a carteira atual. Após executar este comando, será necessário abrir uma carteira novamente.`,
 	Example: `  b3cli wallet close`,
-	Args: cobra.NoArgs,
-	RunE: runWalletClose,
+	Args:    cobra.NoArgs,
+	RunE:    runWalletClose,
 }
 
 var walletLockCmd = &cobra.Command{
@@ -71,8 +71,8 @@ var walletLockCmd = &cobra.Command{
 A carteira permanece como "atual" mas será necessário desbloqueá-la novamente
 com a senha mestra para realizar operações.`,
 	Example: `  b3cli wallet lock`,
-	Args: cobra.NoArgs,
-	RunE: runWalletLock,
+	Args:    cobra.NoArgs,
+	RunE:    runWalletLock,
 }
 
 func init() {

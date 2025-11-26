@@ -52,9 +52,9 @@ func (i earningAssetItem) Description() string {
 
 // addEarningModel represents the state of the add earning TUI
 type addEarningModel struct {
-	wallet       *wallet.Wallet
-	walletPath   string
-	currentView  addEarningView
+	wallet      *wallet.Wallet
+	walletPath  string
+	currentView addEarningView
 
 	// Asset selection
 	assetList      list.Model

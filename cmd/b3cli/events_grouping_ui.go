@@ -50,13 +50,11 @@ func (i groupingAssetItem) Description() string {
 	return fmt.Sprintf("Average Price: R$ %s", i.price)
 }
 
-func newGroupingModel(walletPath string) groupingModel {
-	// Load wallet
-	w, err := wallet.Load(walletPath)
-	if err != nil {
+func newGroupingModel(w *wallet.Wallet, walletPath string) groupingModel {
+	if w == nil {
 		return groupingModel{
 			walletPath: walletPath,
-			err:        fmt.Errorf("failed to load wallet: %w", err),
+			err:        fmt.Errorf("wallet is nil"),
 		}
 	}
 

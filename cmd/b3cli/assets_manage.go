@@ -9,7 +9,6 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/john/b3-project/internal/config"
 	"github.com/john/b3-project/internal/parser"
 	"github.com/john/b3-project/internal/wallet"
 	"github.com/spf13/cobra"
@@ -563,16 +562,10 @@ func (m model) viewConfirmCreate() string {
 
 // runAssetsManage executa o comando interativo de gerenciamento de assets
 func runAssetsManage(cmd *cobra.Command, args []string) error {
-	// Obter wallet atual
-	absPath, err := config.GetCurrentWallet()
+	// Get or load wallet (will prompt for password if locked)
+	w, err := getOrLoadWallet()
 	if err != nil {
 		return err
-	}
-
-	// Carregar wallet
-	w, err := wallet.Load(absPath)
-	if err != nil {
-		return fmt.Errorf("erro ao carregar wallet: %w", err)
 	}
 
 	// Verificar se há ativos ativos (quantity >= 1)
@@ -590,7 +583,7 @@ func runAssetsManage(cmd *cobra.Command, args []string) error {
 	}
 
 	// Iniciar aplicação TUI
-	p := tea.NewProgram(initialModel(w, absPath), tea.WithAltScreen())
+	p := tea.NewProgram(initialModel(w, w.GetDirPath()), tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("erro ao executar interface: %w", err)
 	}

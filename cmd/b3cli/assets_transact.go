@@ -11,7 +11,6 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/spf13/cobra"
 
-	"github.com/john/b3-project/internal/config"
 	"github.com/john/b3-project/internal/parser"
 	"github.com/john/b3-project/internal/wallet"
 )
@@ -21,17 +20,12 @@ var assetsBuyCmd = &cobra.Command{
 	Short: "Buy assets",
 	Long:  "Interactive interface to buy assets and add them to your wallet",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		walletPath, err := config.GetCurrentWallet()
+		w, err := getOrLoadWallet()
 		if err != nil {
-			return fmt.Errorf("no wallet is currently open. Use 'b3cli wallet open <path>' first")
+			return err
 		}
 
-		w, err := wallet.Load(walletPath)
-		if err != nil {
-			return fmt.Errorf("failed to load wallet: %w", err)
-		}
-
-		p := tea.NewProgram(newBuyModel(w, walletPath))
+		p := tea.NewProgram(newBuyModel(w, w.GetDirPath()))
 		if _, err := p.Run(); err != nil {
 			return fmt.Errorf("error running TUI: %w", err)
 		}
@@ -45,17 +39,12 @@ var assetsSellCmd = &cobra.Command{
 	Short: "Sell assets",
 	Long:  "Interactive interface to sell assets from your wallet",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		walletPath, err := config.GetCurrentWallet()
+		w, err := getOrLoadWallet()
 		if err != nil {
-			return fmt.Errorf("no wallet is currently open. Use 'b3cli wallet open <path>' first")
+			return err
 		}
 
-		w, err := wallet.Load(walletPath)
-		if err != nil {
-			return fmt.Errorf("failed to load wallet: %w", err)
-		}
-
-		p := tea.NewProgram(newSellModel(w, walletPath))
+		p := tea.NewProgram(newSellModel(w, w.GetDirPath()))
 		if _, err := p.Run(); err != nil {
 			return fmt.Errorf("error running TUI: %w", err)
 		}

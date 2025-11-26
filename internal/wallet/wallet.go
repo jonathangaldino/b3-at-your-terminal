@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/john/b3-project/internal/parser"
+	wcrypto "github.com/john/b3-project/internal/wallet/crypto"
 	"github.com/shopspring/decimal"
 )
 
@@ -17,6 +18,13 @@ type Wallet struct {
 
 	// Assets mapeia ticker -> Asset para acesso rápido aos ativos
 	Assets map[string]*Asset
+
+	// encryptionKey é a chave usada para criptografar/descriptografar a wallet
+	// Mantida em memória apenas durante a sessão (nunca salva em disco)
+	encryptionKey []byte
+
+	// dirPath é o caminho do diretório onde a wallet está armazenada
+	dirPath string
 }
 
 // NewWallet cria uma nova Wallet a partir de uma lista de transações
@@ -196,4 +204,39 @@ func (w *Wallet) ConvertSubscriptionToParent(subscriptionTicker, parentTicker st
 	}
 
 	return result, nil
+}
+
+// Lock securely clears the encryption key from memory
+// After locking, the wallet can no longer save or perform encrypted operations
+// until unlocked again with the master password
+func (w *Wallet) Lock() {
+	if w.encryptionKey != nil {
+		wcrypto.ZeroBytes(w.encryptionKey)
+		w.encryptionKey = nil
+	}
+}
+
+// IsLocked returns true if the wallet's encryption key has been cleared
+func (w *Wallet) IsLocked() bool {
+	return w.encryptionKey == nil
+}
+
+// SetEncryptionKey sets the encryption key (used internally after unlocking)
+func (w *Wallet) SetEncryptionKey(key []byte) {
+	w.encryptionKey = key
+}
+
+// GetEncryptionKey returns the encryption key (used internally for save/load)
+func (w *Wallet) GetEncryptionKey() []byte {
+	return w.encryptionKey
+}
+
+// SetDirPath sets the directory path where the wallet is stored
+func (w *Wallet) SetDirPath(path string) {
+	w.dirPath = path
+}
+
+// GetDirPath returns the directory path where the wallet is stored
+func (w *Wallet) GetDirPath() string {
+	return w.dirPath
 }

@@ -1,30 +1,17 @@
 package wallet
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"time"
 
 	"github.com/john/b3-project/internal/parser"
+	wcrypto "github.com/john/b3-project/internal/wallet/crypto"
 	"github.com/shopspring/decimal"
 	"gopkg.in/yaml.v3"
 )
-
-// AssetYAML representa um ativo simplificado para serialização YAML
-// Valores monetários são armazenados como strings para manter precisão decimal
-// Quantity é int pois representa quantidade inteira de papéis
-type AssetYAML struct {
-	Ticker             string `yaml:"ticker"`
-	Type               string `yaml:"type"`
-	SubType            string `yaml:"subtype,omitempty"`
-	Segment            string `yaml:"segment,omitempty"`
-	AveragePrice       string `yaml:"average_price"`
-	TotalInvestedValue string `yaml:"total_invested_value"`
-	Quantity           int    `yaml:"quantity"`
-	IsSubscription     bool   `yaml:"is_subscription,omitempty"`
-	SubscriptionOf     string `yaml:"subscription_of,omitempty"`
-}
 
 // TransactionYAML representa uma transação simplificada para serialização YAML
 // Valores numéricos são armazenados como strings para manter precisão decimal
@@ -39,6 +26,22 @@ type TransactionYAML struct {
 	Hash        string `yaml:"hash"`
 }
 
+// AssetYAML representa um ativo simplificado para serialização YAML
+// Valores monetários são armazenados como strings para manter precisão decimal
+type AssetYAML struct {
+	Ticker             string          `yaml:"ticker"`
+	Type               string          `yaml:"type"`
+	SubType            string          `yaml:"subtype,omitempty"`
+	Segment            string          `yaml:"segment,omitempty"`
+	AveragePrice       string          `yaml:"average_price"`
+	TotalInvestedValue string          `yaml:"total_invested_value"`
+	TotalEarnings      string          `yaml:"total_earnings"`
+	Quantity           int             `yaml:"quantity"`
+	IsSubscription     bool            `yaml:"is_subscription,omitempty"`
+	SubscriptionOf     string          `yaml:"subscription_of,omitempty"`
+	Earnings           []EarningYAML   `yaml:"earnings,omitempty"`
+}
+
 // EarningYAML representa um provento simplificado para serialização YAML
 // Valores numéricos são armazenados como strings para manter precisão decimal
 type EarningYAML struct {
@@ -51,119 +54,64 @@ type EarningYAML struct {
 	Hash        string `yaml:"hash"`
 }
 
-// Save salva a wallet em arquivos YAML separados
-// - assets.yaml: contém apenas ativos ativos (quantity != 0)
-// - sold-assets.yaml: contém ativos vendidos completamente (quantity == 0)
-// - transactions.yaml: contém a lista de transações
-// - earnings.yaml: contém a lista de proventos recebidos
+// VaultData representa os dados completos da wallet que serão criptografados
+type VaultData struct {
+	Transactions []TransactionYAML `yaml:"transactions"`
+	Assets       []AssetYAML       `yaml:"assets"`
+}
+
+// Save encrypts and saves the wallet to disk
+// Also updates the unlocked cache if it exists (for session persistence)
+// The wallet must have an encryption key set (unlocked) to be saved
 func (w *Wallet) Save(dirPath string) error {
-	// Criar diretório se não existir
-	if err := os.MkdirAll(dirPath, 0755); err != nil {
-		return err
+	// Check if wallet is locked
+	if w.IsLocked() {
+		return fmt.Errorf("wallet is locked - cannot save without encryption key")
 	}
 
-	// Salvar assets ativos e vendidos
-	if err := w.saveAssets(dirPath); err != nil {
-		return err
+	// Prepare vault data
+	vaultData := w.prepareVaultData()
+
+	// Convert to crypto.VaultData format
+	cryptoVaultData := wcrypto.VaultData{
+		Transactions: vaultData.Transactions,
+		Assets:       vaultData.Assets,
 	}
 
-	// Salvar transactions
-	if err := w.saveTransactions(dirPath); err != nil {
-		return err
+	// Save encrypted vault
+	if err := wcrypto.SaveVault(dirPath, cryptoVaultData, w.encryptionKey); err != nil {
+		return fmt.Errorf("failed to save wallet: %w", err)
 	}
 
-	// Salvar earnings
-	if err := w.saveEarnings(dirPath); err != nil {
-		return err
+	// If unlocked cache exists, update it too
+	if IsUnlocked(dirPath) {
+		if err := w.SaveUnlocked(dirPath); err != nil {
+			return fmt.Errorf("failed to update unlocked cache: %w", err)
+		}
 	}
+
+	// Update stored dirPath
+	w.dirPath = dirPath
 
 	return nil
 }
 
-// saveAssets salva os ativos em dois arquivos separados:
-// - assets.yaml: apenas ativos com quantity != 0 (carteira atual)
-// - sold-assets.yaml: ativos com quantity == 0 (vendidos completamente)
-func (w *Wallet) saveAssets(dirPath string) error {
-	// Coletar e ordenar assets por ticker
-	tickers := make([]string, 0, len(w.Assets))
-	for ticker := range w.Assets {
-		tickers = append(tickers, ticker)
-	}
-	sort.Strings(tickers)
-
-	// Separar assets ativos dos vendidos
-	activeAssets := make([]AssetYAML, 0)
-	soldAssets := make([]AssetYAML, 0)
-
-	for _, ticker := range tickers {
-		asset := w.Assets[ticker]
-		assetYAML := AssetYAML{
-			Ticker:             asset.ID,
-			Type:               asset.Type,
-			SubType:            asset.SubType,
-			Segment:            asset.Segment,
-			AveragePrice:       asset.AveragePrice.StringFixed(4),
-			TotalInvestedValue: asset.TotalInvestedValue.StringFixed(4),
-			Quantity:           asset.Quantity,
-			IsSubscription:     asset.IsSubscription,
-			SubscriptionOf:     asset.SubscriptionOf,
-		}
-
-		if asset.Quantity == 0 {
-			soldAssets = append(soldAssets, assetYAML)
-		} else {
-			activeAssets = append(activeAssets, assetYAML)
-		}
+// prepareVaultData converts wallet data to VaultData for serialization
+func (w *Wallet) prepareVaultData() VaultData {
+	vaultData := VaultData{
+		Transactions: make([]TransactionYAML, 0, len(w.Transactions)),
+		Assets:       make([]AssetYAML, 0, len(w.Assets)),
 	}
 
-	// Salvar assets ativos
-	if len(activeAssets) > 0 {
-		data, err := yaml.Marshal(activeAssets)
-		if err != nil {
-			return err
-		}
-		filePath := filepath.Join(dirPath, "assets.yaml")
-		if err := os.WriteFile(filePath, data, 0644); err != nil {
-			return err
-		}
-	} else {
-		// Se não houver assets ativos, remover o arquivo
-		filePath := filepath.Join(dirPath, "assets.yaml")
-		os.Remove(filePath)
-	}
-
-	// Salvar assets vendidos
-	if len(soldAssets) > 0 {
-		data, err := yaml.Marshal(soldAssets)
-		if err != nil {
-			return err
-		}
-		filePath := filepath.Join(dirPath, "sold-assets.yaml")
-		if err := os.WriteFile(filePath, data, 0644); err != nil {
-			return err
-		}
-	} else {
-		// Se não houver assets vendidos, remover o arquivo
-		filePath := filepath.Join(dirPath, "sold-assets.yaml")
-		os.Remove(filePath)
-	}
-
-	return nil
-}
-
-// saveTransactions salva apenas as transações em transactions.yaml
-func (w *Wallet) saveTransactions(dirPath string) error {
-	// Ordenar transactions por data (mais antigo primeiro)
+	// Convert transactions
 	transactions := make([]parser.Transaction, len(w.Transactions))
 	copy(transactions, w.Transactions)
 	sort.Slice(transactions, func(i, j int) bool {
 		return transactions[i].Date.Before(transactions[j].Date)
 	})
 
-	// Converter para TransactionYAML
-	transactionsYAML := make([]TransactionYAML, 0, len(transactions))
 	for _, t := range transactions {
-		transactionsYAML = append(transactionsYAML, TransactionYAML{
+		vaultData.Transactions = append(vaultData.Transactions, TransactionYAML{
 			Date:        t.Date.Format("2006-01-02"),
 			Type:        t.Type,
 			Institution: t.Institution,
@@ -175,117 +123,101 @@ func (w *Wallet) saveTransactions(dirPath string) error {
 		})
 	}
 
-	// Serializar para YAML
-	data, err := yaml.Marshal(transactionsYAML)
-	if err != nil {
-		return err
+	// Convert assets (sorted by ticker)
+	tickers := make([]string, 0, len(w.Assets))
+	for ticker := range w.Assets {
+		tickers = append(tickers, ticker)
+	}
+	sort.Strings(tickers)
+
+	for _, ticker := range tickers {
+		asset := w.Assets[ticker]
+
+		// Convert earnings
+		earnings := make([]EarningYAML, 0, len(asset.Earnings))
+		for _, e := range asset.Earnings {
+			earnings = append(earnings, EarningYAML{
+				Date:        e.Date.Format("2006-01-02"),
+				Type:        e.Type,
+				Ticker:      e.Ticker,
+				Quantity:    e.Quantity.StringFixed(4),
+				UnitPrice:   e.UnitPrice.StringFixed(4),
+				TotalAmount: e.TotalAmount.StringFixed(4),
+				Hash:        e.Hash,
+			})
+		}
+
+		assetYAML := AssetYAML{
+			Ticker:             asset.ID,
+			Type:               asset.Type,
+			SubType:            asset.SubType,
+			Segment:            asset.Segment,
+			AveragePrice:       asset.AveragePrice.StringFixed(4),
+			TotalInvestedValue: asset.TotalInvestedValue.StringFixed(4),
+			TotalEarnings:      asset.TotalEarnings.StringFixed(4),
+			Quantity:           asset.Quantity,
+			IsSubscription:     asset.IsSubscription,
+			SubscriptionOf:     asset.SubscriptionOf,
+			Earnings:           earnings,
+		}
+
+		vaultData.Assets = append(vaultData.Assets, assetYAML)
 	}
 
-	// Salvar arquivo
-	filePath := filepath.Join(dirPath, "transactions.yaml")
-	return os.WriteFile(filePath, data, 0644)
+	return vaultData
 }
 
-// saveEarnings salva os proventos em earnings.yaml
-func (w *Wallet) saveEarnings(dirPath string) error {
-	// Coletar todos os earnings de todos os assets
-	var allEarnings []parser.Earning
-	for _, asset := range w.Assets {
-		allEarnings = append(allEarnings, asset.Earnings...)
-	}
-
-	// Se não houver earnings, remover o arquivo se existir
-	if len(allEarnings) == 0 {
-		filePath := filepath.Join(dirPath, "earnings.yaml")
-		os.Remove(filePath)
-		return nil
-	}
-
-	// Ordenar earnings por data (mais antigo primeiro)
-	sort.Slice(allEarnings, func(i, j int) bool {
-		return allEarnings[i].Date.Before(allEarnings[j].Date)
-	})
-
-	// Converter para EarningYAML
-	earningsYAML := make([]EarningYAML, 0, len(allEarnings))
-	for _, e := range allEarnings {
-		earningsYAML = append(earningsYAML, EarningYAML{
-			Date:        e.Date.Format("2006-01-02"),
-			Type:        e.Type,
-			Ticker:      e.Ticker,
-			Quantity:    e.Quantity.StringFixed(4),
-			UnitPrice:   e.UnitPrice.StringFixed(4),
-			TotalAmount: e.TotalAmount.StringFixed(4),
-			Hash:        e.Hash,
-		})
-	}
-
-	// Serializar para YAML
-	data, err := yaml.Marshal(earningsYAML)
+// Create creates a new encrypted wallet with the given password
+// Returns the unlocked wallet ready to use
+func Create(dirPath, password string) (*Wallet, error) {
+	// Initialize encrypted vault
+	encryptionKey, err := wcrypto.InitializeVault(dirPath, password)
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("failed to create wallet: %w", err)
 	}
 
-	// Salvar arquivo
-	filePath := filepath.Join(dirPath, "earnings.yaml")
-	return os.WriteFile(filePath, data, 0644)
-}
-
-// Load carrega uma wallet dos arquivos YAML separados
-func Load(dirPath string) (*Wallet, error) {
-	// Tentar migrar de formato antigo se necessário
-	if err := migrateOldFormat(dirPath); err != nil {
-		// Se falhar, continuar tentando carregar do novo formato
-	}
-
-	// Carregar transactions
-	transactions, err := loadTransactions(dirPath)
-	if err != nil {
-		return nil, err
-	}
-
-	// Criar Wallet a partir das transações
-	// Isso automaticamente recalcula todos os campos derivados
-	w := NewWallet(transactions)
-
-	// Carregar e restaurar metadados dos assets
-	if err := loadAssetsMetadata(dirPath, w); err != nil {
-		// Se não conseguir carregar assets.yaml, continuar mesmo assim
-		// (pode ser wallet antiga ou recém-criada)
-	}
-
-	// Carregar earnings e associar aos assets
-	if err := loadEarnings(dirPath, w); err != nil {
-		// Se não conseguir carregar earnings.yaml, continuar mesmo assim
-		// (pode ser wallet antiga ou sem proventos ainda)
-	}
+	// Create empty wallet
+	w := NewWallet([]parser.Transaction{})
+	w.SetEncryptionKey(encryptionKey)
+	w.SetDirPath(dirPath)
 
 	return w, nil
 }
 
-// loadTransactions carrega as transações do arquivo transactions.yaml
-func loadTransactions(dirPath string) ([]parser.Transaction, error) {
-	filePath := filepath.Join(dirPath, "transactions.yaml")
-
-	// Ler arquivo
-	data, err := os.ReadFile(filePath)
+// Load loads and decrypts a wallet from disk using the provided password
+// Returns the unlocked wallet ready to use
+func Load(dirPath, password string) (*Wallet, error) {
+	// Unlock vault with password
+	encryptionKey, err := wcrypto.UnlockVault(dirPath, password)
 	if err != nil {
-		// Se não existir, retornar lista vazia
-		if os.IsNotExist(err) {
-			return []parser.Transaction{}, nil
-		}
-		return nil, err
+		return nil, fmt.Errorf("failed to unlock wallet: %w", err)
 	}
 
-	// Deserializar YAML
-	var transactionsYAML []TransactionYAML
-	if err := yaml.Unmarshal(data, &transactionsYAML); err != nil {
-		return nil, err
+	// Load encrypted vault
+	cryptoVaultData, err := wcrypto.LoadVault(dirPath, encryptionKey)
+	if err != nil {
+		wcrypto.ZeroBytes(encryptionKey)
+		return nil, fmt.Errorf("failed to load wallet: %w", err)
 	}
 
-	// Converter para Transaction
-	transactions := make([]parser.Transaction, 0, len(transactionsYAML))
-	for _, ty := range transactionsYAML {
+	// Convert from interface{} to proper types
+	var vaultData VaultData
+
+	// Marshal and unmarshal to convert interface{} to typed structs
+	yamlBytes, err := yaml.Marshal(cryptoVaultData)
+	if err != nil {
+		wcrypto.ZeroBytes(encryptionKey)
+		return nil, fmt.Errorf("failed to process vault data: %w", err)
+	}
+
+	if err := yaml.Unmarshal(yamlBytes, &vaultData); err != nil {
+		wcrypto.ZeroBytes(encryptionKey)
+		return nil, fmt.Errorf("failed to parse vault data: %w", err)
+	}
+
+	// Convert transactions
+	transactions := make([]parser.Transaction, 0, len(vaultData.Transactions))
+	for _, ty := range vaultData.Transactions {
 		date, _ := time.Parse("2006-01-02", ty.Date)
 		quantity, _ := decimal.NewFromString(ty.Quantity)
 		price, _ := decimal.NewFromString(ty.Price)
@@ -303,203 +235,231 @@ func loadTransactions(dirPath string) ([]parser.Transaction, error) {
 		})
 	}
 
-	return transactions, nil
-}
-
-// loadAssetsMetadata carrega metadados dos assets de assets.yaml e sold-assets.yaml
-func loadAssetsMetadata(dirPath string, w *Wallet) error {
-	// Carregar assets ativos
-	activePath := filepath.Join(dirPath, "assets.yaml")
-	if data, err := os.ReadFile(activePath); err == nil {
-		var assetsYAML []AssetYAML
-		if err := yaml.Unmarshal(data, &assetsYAML); err == nil {
-			for _, ay := range assetsYAML {
-				if asset, exists := w.Assets[ay.Ticker]; exists {
-					asset.IsSubscription = ay.IsSubscription
-					asset.SubscriptionOf = ay.SubscriptionOf
-					asset.SubType = ay.SubType
-					asset.Segment = ay.Segment
-				}
-			}
-		}
-	}
-
-	// Carregar assets vendidos
-	soldPath := filepath.Join(dirPath, "sold-assets.yaml")
-	if data, err := os.ReadFile(soldPath); err == nil {
-		var assetsYAML []AssetYAML
-		if err := yaml.Unmarshal(data, &assetsYAML); err == nil {
-			for _, ay := range assetsYAML {
-				if asset, exists := w.Assets[ay.Ticker]; exists {
-					asset.IsSubscription = ay.IsSubscription
-					asset.SubscriptionOf = ay.SubscriptionOf
-					asset.SubType = ay.SubType
-					asset.Segment = ay.Segment
-				}
-			}
-		}
-	}
-
-	return nil
-}
-
-// loadEarnings carrega os proventos do arquivo earnings.yaml e os associa aos assets
-func loadEarnings(dirPath string, w *Wallet) error {
-	filePath := filepath.Join(dirPath, "earnings.yaml")
-
-	// Ler arquivo
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		// Se não existir, retornar nil (não é erro crítico)
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
-	}
-
-	// Deserializar YAML
-	var earningsYAML []EarningYAML
-	if err := yaml.Unmarshal(data, &earningsYAML); err != nil {
-		return err
-	}
-
-	// Converter para Earning e associar aos assets
-	for _, ey := range earningsYAML {
-		date, _ := time.Parse("2006-01-02", ey.Date)
-		quantity, _ := decimal.NewFromString(ey.Quantity)
-		unitPrice, _ := decimal.NewFromString(ey.UnitPrice)
-		totalAmount, _ := decimal.NewFromString(ey.TotalAmount)
-
-		earning := parser.Earning{
-			Date:        date,
-			Type:        ey.Type,
-			Ticker:      ey.Ticker,
-			Quantity:    quantity,
-			UnitPrice:   unitPrice,
-			TotalAmount: totalAmount,
-			Hash:        ey.Hash,
-		}
-
-		// Associar ao asset correspondente
-		asset, exists := w.Assets[earning.Ticker]
-		if !exists {
-			// Criar asset se não existir (caso o asset tenha apenas earnings mas nenhuma transação)
-			asset = &Asset{
-				ID:           earning.Ticker,
-				Negotiations: make([]parser.Transaction, 0),
-				Earnings:     make([]parser.Earning, 0),
-				Type:         "renda variável",
-				SubType:      "",
-				Segment:      "",
-			}
-			w.Assets[earning.Ticker] = asset
-		}
-
-		// Adicionar earning ao asset
-		asset.Earnings = append(asset.Earnings, earning)
-	}
-
-	// Recalcular TotalEarnings para todos os assets
-	w.RecalculateAssets()
-
-	return nil
-}
-
-// Exists verifica se existe uma wallet válida no diretório
-// Uma wallet é considerada válida se existe o arquivo transactions.yaml ou wallet.yaml (formato antigo)
-func Exists(dirPath string) bool {
-	// Verificar novo formato
-	transactionsPath := filepath.Join(dirPath, "transactions.yaml")
-	if _, err := os.Stat(transactionsPath); err == nil {
-		return true
-	}
-
-	// Verificar formato antigo
-	oldWalletPath := filepath.Join(dirPath, "wallet.yaml")
-	if _, err := os.Stat(oldWalletPath); err == nil {
-		return true
-	}
-
-	return false
-}
-
-// WalletFile representa a estrutura do arquivo YAML antigo (wallet.yaml)
-type WalletFile struct {
-	Assets       []AssetYAML       `yaml:"assets"`
-	Transactions []TransactionYAML `yaml:"transactions"`
-}
-
-// migrateOldFormat migra automaticamente do formato antigo (wallet.yaml) para o novo formato
-// (assets.yaml + transactions.yaml) se necessário
-func migrateOldFormat(dirPath string) error {
-	oldWalletPath := filepath.Join(dirPath, "wallet.yaml")
-	newTransactionsPath := filepath.Join(dirPath, "transactions.yaml")
-
-	// Verificar se já existe no novo formato
-	if _, err := os.Stat(newTransactionsPath); err == nil {
-		// Já está no novo formato
-		return nil
-	}
-
-	// Verificar se existe wallet.yaml antigo
-	if _, err := os.Stat(oldWalletPath); os.IsNotExist(err) {
-		// Não existe formato antigo
-		return nil
-	}
-
-	// Carregar wallet.yaml antigo
-	data, err := os.ReadFile(oldWalletPath)
-	if err != nil {
-		return err
-	}
-
-	var walletFile WalletFile
-	if err := yaml.Unmarshal(data, &walletFile); err != nil {
-		return err
-	}
-
-	// Converter para transações
-	transactions := make([]parser.Transaction, 0, len(walletFile.Transactions))
-	for _, ty := range walletFile.Transactions {
-		date, _ := time.Parse("2006-01-02", ty.Date)
-		quantity, _ := decimal.NewFromString(ty.Quantity)
-		price, _ := decimal.NewFromString(ty.Price)
-		amount, _ := decimal.NewFromString(ty.Amount)
-
-		transactions = append(transactions, parser.Transaction{
-			Date:        date,
-			Type:        ty.Type,
-			Institution: ty.Institution,
-			Ticker:      ty.Ticker,
-			Quantity:    quantity,
-			Price:       price,
-			Amount:      amount,
-			Hash:        ty.Hash,
-		})
-	}
-
-	// Criar wallet a partir das transações
+	// Create wallet from transactions
 	w := NewWallet(transactions)
 
-	// Restaurar metadados dos assets
-	for _, ay := range walletFile.Assets {
-		if asset, exists := w.Assets[ay.Ticker]; exists {
-			asset.IsSubscription = ay.IsSubscription
-			asset.SubscriptionOf = ay.SubscriptionOf
-			asset.SubType = ay.SubType
-			asset.Segment = ay.Segment
+	// Restore asset metadata and earnings
+	for _, ay := range vaultData.Assets {
+		asset, exists := w.Assets[ay.Ticker]
+		if !exists {
+			// Create asset if it doesn't exist (e.g., has only earnings)
+			asset = &Asset{
+				ID:           ay.Ticker,
+				Negotiations: make([]parser.Transaction, 0),
+				Earnings:     make([]parser.Earning, 0),
+				Type:         ay.Type,
+				SubType:      ay.SubType,
+				Segment:      ay.Segment,
+			}
+			w.Assets[ay.Ticker] = asset
+		}
+
+		// Restore metadata
+		asset.SubType = ay.SubType
+		asset.Segment = ay.Segment
+		asset.IsSubscription = ay.IsSubscription
+		asset.SubscriptionOf = ay.SubscriptionOf
+
+		// Restore earnings
+		for _, ey := range ay.Earnings {
+			date, _ := time.Parse("2006-01-02", ey.Date)
+			quantity, _ := decimal.NewFromString(ey.Quantity)
+			unitPrice, _ := decimal.NewFromString(ey.UnitPrice)
+			totalAmount, _ := decimal.NewFromString(ey.TotalAmount)
+
+			earning := parser.Earning{
+				Date:        date,
+				Type:        ey.Type,
+				Ticker:      ey.Ticker,
+				Quantity:    quantity,
+				UnitPrice:   unitPrice,
+				TotalAmount: totalAmount,
+				Hash:        ey.Hash,
+			}
+
+			asset.Earnings = append(asset.Earnings, earning)
 		}
 	}
 
-	// Salvar no novo formato
-	if err := w.Save(dirPath); err != nil {
-		return err
+	// Recalculate derived fields
+	w.RecalculateAssets()
+
+	// Set encryption key and path
+	w.SetEncryptionKey(encryptionKey)
+	w.SetDirPath(dirPath)
+
+	return w, nil
+}
+
+// Exists checks if an encrypted wallet exists at the given directory
+func Exists(dirPath string) bool {
+	return wcrypto.IsEncryptedWallet(dirPath)
+}
+
+// getUnlockedPath returns the path to the unlocked (decrypted) cache file
+func getUnlockedPath(dirPath string) string {
+	return filepath.Join(dirPath, "vault.unlocked")
+}
+
+// getSessionKeyPath returns the path to the session encryption key file
+func getSessionKeyPath(dirPath string) string {
+	return filepath.Join(dirPath, "session.key")
+}
+
+// SaveUnlocked saves an unencrypted copy of the wallet for session persistence
+// This allows commands to access the wallet without requiring password entry each time
+// WARNING: This file contains sensitive unencrypted data - should only exist during active session
+func (w *Wallet) SaveUnlocked(dirPath string) error {
+	// Prepare vault data
+	vaultData := w.prepareVaultData()
+
+	// Serialize to YAML
+	yamlBytes, err := yaml.Marshal(vaultData)
+	if err != nil {
+		return fmt.Errorf("failed to serialize wallet: %w", err)
 	}
 
-	// Renomear wallet.yaml antigo para wallet.yaml.bak
-	backupPath := filepath.Join(dirPath, "wallet.yaml.bak")
-	if err := os.Rename(oldWalletPath, backupPath); err != nil {
-		// Se não conseguir renomear, não é crítico
+	// Write to unlocked cache file with restricted permissions (owner read/write only)
+	unlockedPath := getUnlockedPath(dirPath)
+	if err := os.WriteFile(unlockedPath, yamlBytes, 0600); err != nil {
+		return fmt.Errorf("failed to save unlocked wallet: %w", err)
+	}
+
+	// Also save encryption key to session file (if wallet is unlocked)
+	if !w.IsLocked() {
+		sessionKeyPath := getSessionKeyPath(dirPath)
+		if err := os.WriteFile(sessionKeyPath, w.encryptionKey, 0600); err != nil {
+			return fmt.Errorf("failed to save session key: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// LoadUnlocked loads the wallet from the unlocked cache file
+// Returns error if cache doesn't exist or is invalid
+func LoadUnlocked(dirPath string) (*Wallet, error) {
+	unlockedPath := getUnlockedPath(dirPath)
+
+	// Read unlocked cache file
+	yamlBytes, err := os.ReadFile(unlockedPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read unlocked wallet: %w", err)
+	}
+
+	// Deserialize YAML
+	var vaultData VaultData
+	if err := yaml.Unmarshal(yamlBytes, &vaultData); err != nil {
+		return nil, fmt.Errorf("failed to parse unlocked wallet: %w", err)
+	}
+
+	// Convert transactions
+	transactions := make([]parser.Transaction, 0, len(vaultData.Transactions))
+	for _, ty := range vaultData.Transactions {
+		date, _ := time.Parse("2006-01-02", ty.Date)
+		quantity, _ := decimal.NewFromString(ty.Quantity)
+		price, _ := decimal.NewFromString(ty.Price)
+		amount, _ := decimal.NewFromString(ty.Amount)
+
+		transactions = append(transactions, parser.Transaction{
+			Date:        date,
+			Type:        ty.Type,
+			Institution: ty.Institution,
+			Ticker:      ty.Ticker,
+			Quantity:    quantity,
+			Price:       price,
+			Amount:      amount,
+			Hash:        ty.Hash,
+		})
+	}
+
+	// Create wallet from transactions
+	w := NewWallet(transactions)
+
+	// Restore asset metadata and earnings
+	for _, ay := range vaultData.Assets {
+		asset, exists := w.Assets[ay.Ticker]
+		if !exists {
+			// Create asset if it doesn't exist (e.g., has only earnings)
+			asset = &Asset{
+				ID:           ay.Ticker,
+				Negotiations: make([]parser.Transaction, 0),
+				Earnings:     make([]parser.Earning, 0),
+				Type:         ay.Type,
+				SubType:      ay.SubType,
+				Segment:      ay.Segment,
+			}
+			w.Assets[ay.Ticker] = asset
+		}
+
+		// Restore metadata
+		asset.SubType = ay.SubType
+		asset.Segment = ay.Segment
+		asset.IsSubscription = ay.IsSubscription
+		asset.SubscriptionOf = ay.SubscriptionOf
+
+		// Restore earnings
+		for _, ey := range ay.Earnings {
+			date, _ := time.Parse("2006-01-02", ey.Date)
+			quantity, _ := decimal.NewFromString(ey.Quantity)
+			unitPrice, _ := decimal.NewFromString(ey.UnitPrice)
+			totalAmount, _ := decimal.NewFromString(ey.TotalAmount)
+
+			earning := parser.Earning{
+				Date:        date,
+				Type:        ey.Type,
+				Ticker:      ey.Ticker,
+				Quantity:    quantity,
+				UnitPrice:   unitPrice,
+				TotalAmount: totalAmount,
+				Hash:        ey.Hash,
+			}
+
+			asset.Earnings = append(asset.Earnings, earning)
+		}
+	}
+
+	// Recalculate derived fields
+	w.RecalculateAssets()
+
+	// Set dir path
+	w.SetDirPath(dirPath)
+
+	// Try to load session encryption key if it exists
+	sessionKeyPath := getSessionKeyPath(dirPath)
+	if keyBytes, err := os.ReadFile(sessionKeyPath); err == nil {
+		// Session key found - set it on the wallet
+		w.SetEncryptionKey(keyBytes)
+	}
+	// If session key doesn't exist, wallet will be locked (read-only mode)
+
+	return w, nil
+}
+
+// IsUnlocked checks if an unlocked cache file exists
+func IsUnlocked(dirPath string) bool {
+	unlockedPath := getUnlockedPath(dirPath)
+	_, err := os.Stat(unlockedPath)
+	return err == nil
+}
+
+// ClearUnlocked removes the unlocked cache file and session key
+func ClearUnlocked(dirPath string) error {
+	unlockedPath := getUnlockedPath(dirPath)
+	sessionKeyPath := getSessionKeyPath(dirPath)
+
+	// Remove unlocked cache if it exists
+	if _, err := os.Stat(unlockedPath); err == nil {
+		if err := os.Remove(unlockedPath); err != nil {
+			return fmt.Errorf("failed to remove unlocked cache: %w", err)
+		}
+	}
+
+	// Remove session key if it exists
+	if _, err := os.Stat(sessionKeyPath); err == nil {
+		if err := os.Remove(sessionKeyPath); err != nil {
+			return fmt.Errorf("failed to remove session key: %w", err)
+		}
 	}
 
 	return nil

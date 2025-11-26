@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"sort"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/john/b3-project/internal/parser"
@@ -353,9 +354,129 @@ func runEarningsReports(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+var earningsAddCmd = &cobra.Command{
+	Use:   "add",
+	Short: "Adiciona um provento manualmente",
+	Long: `Interface interativa para adicionar proventos manualmente à carteira.
+
+Permite selecionar um ativo da carteira e registrar:
+- Quantidade de cotas/ações
+- Valor líquido total recebido
+- Tipo de provento (Dividendo/JCP/Rendimento)
+- Data do pagamento (opcional, padrão hoje)
+
+O preço unitário é calculado automaticamente (total / quantidade).
+O comando valida automaticamente e detecta duplicatas.`,
+	Example: `  b3cli earnings add`,
+	Args:    cobra.NoArgs,
+	RunE:    runEarningsAdd,
+}
+
+func runEarningsAdd(cmd *cobra.Command, args []string) error {
+	// Get or load wallet (will prompt for password if locked)
+	w, err := getOrLoadWallet()
+	if err != nil {
+		return err
+	}
+
+	// Check if there are active assets
+	activeAssets := w.GetActiveAssets()
+	if len(activeAssets) == 0 {
+		fmt.Println("Nenhum ativo com saldo positivo encontrado.")
+		fmt.Println("Use 'b3cli assets buy' para adicionar ativos primeiro.")
+		return nil
+	}
+
+	// Start Bubble Tea TUI
+	p := tea.NewProgram(newAddEarningModel(w, w.GetDirPath()), tea.WithAltScreen())
+	if _, err := p.Run(); err != nil {
+		return fmt.Errorf("erro ao executar interface: %w", err)
+	}
+
+	return nil
+}
+
+var earningsListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "Lista os últimos proventos creditados",
+	Long: `Exibe uma lista dos últimos 10 proventos creditados na carteira.
+
+Mostra para cada provento:
+- Ticker do ativo
+- Valor unitário por ação/cota (R$)
+- Quantidade de ações/cotas
+- Data do pagamento
+
+Os proventos são ordenados por data, do mais recente ao mais antigo.`,
+	Example: `  b3cli earnings list`,
+	Args:    cobra.NoArgs,
+	RunE:    runEarningsList,
+}
+
+func runEarningsList(cmd *cobra.Command, args []string) error {
+	// Get or load wallet (will prompt for password if locked)
+	w, err := getOrLoadWallet()
+	if err != nil {
+		return err
+	}
+
+	// Verificar se há proventos
+	totalEarnings := countTotalEarnings(w)
+	if totalEarnings == 0 {
+		fmt.Println("Nenhum provento registrado ainda.")
+		fmt.Println("\nUse 'b3cli earnings parse <arquivo>' ou 'b3cli earnings add' para adicionar proventos.")
+		return nil
+	}
+
+	// Coletar todos os earnings de todos os ativos
+	type EarningWithTicker struct {
+		Ticker  string
+		Earning parser.Earning
+	}
+
+	allEarnings := make([]EarningWithTicker, 0)
+	for ticker, asset := range w.Assets {
+		for _, earning := range asset.Earnings {
+			allEarnings = append(allEarnings, EarningWithTicker{
+				Ticker:  ticker,
+				Earning: earning,
+			})
+		}
+	}
+
+	// Ordenar por data (mais recente primeiro)
+	sort.Slice(allEarnings, func(i, j int) bool {
+		return allEarnings[i].Earning.Date.After(allEarnings[j].Earning.Date)
+	})
+
+	// Pegar os últimos 10
+	limit := 10
+	if len(allEarnings) < limit {
+		limit = len(allEarnings)
+	}
+	recentEarnings := allEarnings[:limit]
+
+	// Exibir
+	fmt.Printf("\n=== ÚLTIMOS %d PROVENTOS CREDITADOS ===\n\n", limit)
+
+	for _, e := range recentEarnings {
+		fmt.Printf("%-8s  R$ %10s/ação  |  %10s ações  |  %s\n",
+			e.Ticker,
+			e.Earning.UnitPrice.StringFixed(4),
+			e.Earning.Quantity.StringFixed(4),
+			e.Earning.Date.Format("02/01/2006"))
+	}
+
+	fmt.Printf("\nTotal de proventos registrados: %d\n", totalEarnings)
+
+	return nil
+}
+
 func init() {
 	// Adicionar subcomandos ao earnings
 	earningsCmd.AddCommand(earningsParseCmd)
 	earningsCmd.AddCommand(earningsOverviewCmd)
 	earningsCmd.AddCommand(earningsReportsCmd)
+	earningsCmd.AddCommand(earningsAddCmd)
+	earningsCmd.AddCommand(earningsListCmd)
 }

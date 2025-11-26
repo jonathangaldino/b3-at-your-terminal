@@ -37,7 +37,8 @@ func init() {
 }
 
 // getOrLoadWallet returns the current wallet, loading it if necessary
-// If the wallet is not already unlocked in memory, it will prompt for the password
+// First tries to load from unlocked session cache (no password needed)
+// If cache doesn't exist, prompts for password to decrypt
 func getOrLoadWallet() (*wallet.Wallet, error) {
 	// Get current wallet path
 	walletPath, err := config.GetCurrentWallet()
@@ -55,6 +56,18 @@ func getOrLoadWallet() (*wallet.Wallet, error) {
 		return currentWallet, nil
 	}
 
+	// Try to load from unlocked cache first (session persistence)
+	if wallet.IsUnlocked(walletPath) {
+		w, err := wallet.LoadUnlocked(walletPath)
+		if err == nil {
+			// Successfully loaded from cache - no password needed!
+			currentWallet = w
+			return w, nil
+		}
+		// If cache is corrupted, fall through to password prompt
+		fmt.Printf("⚠ Unlocked cache corrupted, will prompt for password\n")
+	}
+
 	// Wallet needs to be unlocked - prompt for password
 	fmt.Println("Wallet is locked. Please enter your password to unlock.")
 	password, err := readPassword("Enter master password: ")
@@ -66,6 +79,12 @@ func getOrLoadWallet() (*wallet.Wallet, error) {
 	w, err := wallet.Load(walletPath, password)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unlock wallet: %w", err)
+	}
+
+	// Save unlocked cache for future commands in this session
+	if err := w.SaveUnlocked(walletPath); err != nil {
+		// Non-fatal - just warn
+		fmt.Printf("⚠ Warning: failed to save session cache: %v\n", err)
 	}
 
 	// Store unlocked wallet in memory

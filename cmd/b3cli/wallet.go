@@ -148,6 +148,11 @@ func runWalletCreate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("erro ao criar wallet: %w", err)
 	}
 
+	// Salvar cache descriptografado para persistência de sessão
+	if err := w.SaveUnlocked(absPath); err != nil {
+		return fmt.Errorf("erro ao salvar cache de sessão: %w", err)
+	}
+
 	// Definir como wallet atual
 	if err := config.SetCurrentWallet(absPath); err != nil {
 		return fmt.Errorf("erro ao definir wallet atual: %w", err)
@@ -162,9 +167,14 @@ func runWalletCreate(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  - %s (encrypted vault)\n", filepath.Join(absPath, "vault.enc"))
 	fmt.Printf("  - %s (encryption metadata)\n", filepath.Join(absPath, "salt.bin"))
 	fmt.Println()
+	fmt.Println("Wallet is now open for the session - no password needed for commands.")
+	fmt.Println()
 	fmt.Println("Next steps:")
 	fmt.Printf("  1. Import transactions: b3cli parse files/*.xlsx\n")
 	fmt.Printf("  2. View your assets: b3cli assets overview\n")
+	fmt.Println()
+	fmt.Println("When done, close the wallet to secure it:")
+	fmt.Println("  b3cli wallet close")
 
 	return nil
 }
@@ -195,6 +205,11 @@ func runWalletOpen(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to unlock wallet: %w", err)
 	}
 
+	// Salvar cache descriptografado para persistência de sessão
+	if err := w.SaveUnlocked(absPath); err != nil {
+		return fmt.Errorf("erro ao salvar cache de sessão: %w", err)
+	}
+
 	// Definir como wallet atual
 	if err := config.SetCurrentWallet(absPath); err != nil {
 		return fmt.Errorf("erro ao definir wallet atual: %w", err)
@@ -207,10 +222,13 @@ func runWalletOpen(cmd *cobra.Command, args []string) error {
 	fmt.Printf("✓ Transactions: %d\n", len(w.Transactions))
 	fmt.Printf("✓ Assets: %d\n", len(w.Assets))
 	fmt.Println()
-	fmt.Println("You can now use commands without specifying wallet:")
+	fmt.Println("Wallet is now open for the session - no password needed for commands:")
 	fmt.Println("  b3cli parse files/*.xlsx")
 	fmt.Println("  b3cli assets overview")
 	fmt.Println("  b3cli earnings overview")
+	fmt.Println()
+	fmt.Println("When done, close the wallet to secure it:")
+	fmt.Println("  b3cli wallet close")
 
 	return nil
 }
@@ -234,6 +252,11 @@ func runWalletClose(cmd *cobra.Command, args []string) error {
 	// Obter wallet atual antes de fechar
 	walletPath, _ := config.GetCurrentWallet()
 
+	// Limpar cache descriptografado (remove session persistence)
+	if err := wallet.ClearUnlocked(walletPath); err != nil {
+		fmt.Printf("⚠ Warning: failed to clear unlocked cache: %v\n", err)
+	}
+
 	// Limpar chaves da memória se houver wallet desbloqueada
 	if currentWallet != nil {
 		currentWallet.Lock()
@@ -244,7 +267,9 @@ func runWalletClose(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("erro ao fechar wallet: %w", err)
 	}
 
-	fmt.Printf("✓ Wallet closed and locked: %s\n", walletPath)
+	fmt.Printf("✓ Wallet closed and secured: %s\n", walletPath)
+	fmt.Printf("✓ Session cache cleared\n")
+	fmt.Printf("✓ Encrypted vault remains safe on disk\n")
 	fmt.Println()
 	fmt.Println("To work with a wallet again:")
 	fmt.Println("  b3cli wallet open <directory>")
@@ -267,12 +292,18 @@ func runWalletLock(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to save wallet before locking: %w", err)
 	}
 
+	// Clear session cache
+	if err := wallet.ClearUnlocked(walletPath); err != nil {
+		fmt.Printf("⚠ Warning: failed to clear unlocked cache: %v\n", err)
+	}
+
 	// Lock the wallet (clear encryption key from memory)
 	currentWallet.Lock()
 	currentWallet = nil
 
 	fmt.Printf("✓ Wallet locked: %s\n", walletPath)
 	fmt.Println("✓ Encryption keys cleared from memory")
+	fmt.Println("✓ Session cache cleared")
 	fmt.Println()
 	fmt.Println("To unlock the wallet again:")
 	fmt.Printf("  b3cli wallet open %s\n", walletPath)

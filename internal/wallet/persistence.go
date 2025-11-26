@@ -2,6 +2,8 @@ package wallet
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"time"
 
@@ -59,6 +61,7 @@ type VaultData struct {
 }
 
 // Save encrypts and saves the wallet to disk
+// Also updates the unlocked cache if it exists (for session persistence)
 // The wallet must have an encryption key set (unlocked) to be saved
 func (w *Wallet) Save(dirPath string) error {
 	// Check if wallet is locked
@@ -78,6 +81,13 @@ func (w *Wallet) Save(dirPath string) error {
 	// Save encrypted vault
 	if err := wcrypto.SaveVault(dirPath, cryptoVaultData, w.encryptionKey); err != nil {
 		return fmt.Errorf("failed to save wallet: %w", err)
+	}
+
+	// If unlocked cache exists, update it too
+	if IsUnlocked(dirPath) {
+		if err := w.SaveUnlocked(dirPath); err != nil {
+			return fmt.Errorf("failed to update unlocked cache: %w", err)
+		}
 	}
 
 	// Update stored dirPath
@@ -284,4 +294,147 @@ func Load(dirPath, password string) (*Wallet, error) {
 // Exists checks if an encrypted wallet exists at the given directory
 func Exists(dirPath string) bool {
 	return wcrypto.IsEncryptedWallet(dirPath)
+}
+
+// getUnlockedPath returns the path to the unlocked (decrypted) cache file
+func getUnlockedPath(dirPath string) string {
+	return filepath.Join(dirPath, "vault.unlocked")
+}
+
+// SaveUnlocked saves an unencrypted copy of the wallet for session persistence
+// This allows commands to access the wallet without requiring password entry each time
+// WARNING: This file contains sensitive unencrypted data - should only exist during active session
+func (w *Wallet) SaveUnlocked(dirPath string) error {
+	// Prepare vault data
+	vaultData := w.prepareVaultData()
+
+	// Serialize to YAML
+	yamlBytes, err := yaml.Marshal(vaultData)
+	if err != nil {
+		return fmt.Errorf("failed to serialize wallet: %w", err)
+	}
+
+	// Write to unlocked cache file with restricted permissions (owner read/write only)
+	unlockedPath := getUnlockedPath(dirPath)
+	if err := os.WriteFile(unlockedPath, yamlBytes, 0600); err != nil {
+		return fmt.Errorf("failed to save unlocked wallet: %w", err)
+	}
+
+	return nil
+}
+
+// LoadUnlocked loads the wallet from the unlocked cache file
+// Returns error if cache doesn't exist or is invalid
+func LoadUnlocked(dirPath string) (*Wallet, error) {
+	unlockedPath := getUnlockedPath(dirPath)
+
+	// Read unlocked cache file
+	yamlBytes, err := os.ReadFile(unlockedPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read unlocked wallet: %w", err)
+	}
+
+	// Deserialize YAML
+	var vaultData VaultData
+	if err := yaml.Unmarshal(yamlBytes, &vaultData); err != nil {
+		return nil, fmt.Errorf("failed to parse unlocked wallet: %w", err)
+	}
+
+	// Convert transactions
+	transactions := make([]parser.Transaction, 0, len(vaultData.Transactions))
+	for _, ty := range vaultData.Transactions {
+		date, _ := time.Parse("2006-01-02", ty.Date)
+		quantity, _ := decimal.NewFromString(ty.Quantity)
+		price, _ := decimal.NewFromString(ty.Price)
+		amount, _ := decimal.NewFromString(ty.Amount)
+
+		transactions = append(transactions, parser.Transaction{
+			Date:        date,
+			Type:        ty.Type,
+			Institution: ty.Institution,
+			Ticker:      ty.Ticker,
+			Quantity:    quantity,
+			Price:       price,
+			Amount:      amount,
+			Hash:        ty.Hash,
+		})
+	}
+
+	// Create wallet from transactions
+	w := NewWallet(transactions)
+
+	// Restore asset metadata and earnings
+	for _, ay := range vaultData.Assets {
+		asset, exists := w.Assets[ay.Ticker]
+		if !exists {
+			// Create asset if it doesn't exist (e.g., has only earnings)
+			asset = &Asset{
+				ID:           ay.Ticker,
+				Negotiations: make([]parser.Transaction, 0),
+				Earnings:     make([]parser.Earning, 0),
+				Type:         ay.Type,
+				SubType:      ay.SubType,
+				Segment:      ay.Segment,
+			}
+			w.Assets[ay.Ticker] = asset
+		}
+
+		// Restore metadata
+		asset.SubType = ay.SubType
+		asset.Segment = ay.Segment
+		asset.IsSubscription = ay.IsSubscription
+		asset.SubscriptionOf = ay.SubscriptionOf
+
+		// Restore earnings
+		for _, ey := range ay.Earnings {
+			date, _ := time.Parse("2006-01-02", ey.Date)
+			quantity, _ := decimal.NewFromString(ey.Quantity)
+			unitPrice, _ := decimal.NewFromString(ey.UnitPrice)
+			totalAmount, _ := decimal.NewFromString(ey.TotalAmount)
+
+			earning := parser.Earning{
+				Date:        date,
+				Type:        ey.Type,
+				Ticker:      ey.Ticker,
+				Quantity:    quantity,
+				UnitPrice:   unitPrice,
+				TotalAmount: totalAmount,
+				Hash:        ey.Hash,
+			}
+
+			asset.Earnings = append(asset.Earnings, earning)
+		}
+	}
+
+	// Recalculate derived fields
+	w.RecalculateAssets()
+
+	// Set dir path (no encryption key for unlocked wallet)
+	w.SetDirPath(dirPath)
+
+	return w, nil
+}
+
+// IsUnlocked checks if an unlocked cache file exists
+func IsUnlocked(dirPath string) bool {
+	unlockedPath := getUnlockedPath(dirPath)
+	_, err := os.Stat(unlockedPath)
+	return err == nil
+}
+
+// ClearUnlocked removes the unlocked cache file
+func ClearUnlocked(dirPath string) error {
+	unlockedPath := getUnlockedPath(dirPath)
+
+	// Check if file exists first
+	if _, err := os.Stat(unlockedPath); os.IsNotExist(err) {
+		return nil // Nothing to clear
+	}
+
+	// Remove the file
+	if err := os.Remove(unlockedPath); err != nil {
+		return fmt.Errorf("failed to remove unlocked cache: %w", err)
+	}
+
+	return nil
 }

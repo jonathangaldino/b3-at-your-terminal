@@ -301,6 +301,11 @@ func getUnlockedPath(dirPath string) string {
 	return filepath.Join(dirPath, "vault.unlocked")
 }
 
+// getSessionKeyPath returns the path to the session encryption key file
+func getSessionKeyPath(dirPath string) string {
+	return filepath.Join(dirPath, "session.key")
+}
+
 // SaveUnlocked saves an unencrypted copy of the wallet for session persistence
 // This allows commands to access the wallet without requiring password entry each time
 // WARNING: This file contains sensitive unencrypted data - should only exist during active session
@@ -318,6 +323,14 @@ func (w *Wallet) SaveUnlocked(dirPath string) error {
 	unlockedPath := getUnlockedPath(dirPath)
 	if err := os.WriteFile(unlockedPath, yamlBytes, 0600); err != nil {
 		return fmt.Errorf("failed to save unlocked wallet: %w", err)
+	}
+
+	// Also save encryption key to session file (if wallet is unlocked)
+	if !w.IsLocked() {
+		sessionKeyPath := getSessionKeyPath(dirPath)
+		if err := os.WriteFile(sessionKeyPath, w.encryptionKey, 0600); err != nil {
+			return fmt.Errorf("failed to save session key: %w", err)
+		}
 	}
 
 	return nil
@@ -409,8 +422,16 @@ func LoadUnlocked(dirPath string) (*Wallet, error) {
 	// Recalculate derived fields
 	w.RecalculateAssets()
 
-	// Set dir path (no encryption key for unlocked wallet)
+	// Set dir path
 	w.SetDirPath(dirPath)
+
+	// Try to load session encryption key if it exists
+	sessionKeyPath := getSessionKeyPath(dirPath)
+	if keyBytes, err := os.ReadFile(sessionKeyPath); err == nil {
+		// Session key found - set it on the wallet
+		w.SetEncryptionKey(keyBytes)
+	}
+	// If session key doesn't exist, wallet will be locked (read-only mode)
 
 	return w, nil
 }
@@ -422,18 +443,23 @@ func IsUnlocked(dirPath string) bool {
 	return err == nil
 }
 
-// ClearUnlocked removes the unlocked cache file
+// ClearUnlocked removes the unlocked cache file and session key
 func ClearUnlocked(dirPath string) error {
 	unlockedPath := getUnlockedPath(dirPath)
+	sessionKeyPath := getSessionKeyPath(dirPath)
 
-	// Check if file exists first
-	if _, err := os.Stat(unlockedPath); os.IsNotExist(err) {
-		return nil // Nothing to clear
+	// Remove unlocked cache if it exists
+	if _, err := os.Stat(unlockedPath); err == nil {
+		if err := os.Remove(unlockedPath); err != nil {
+			return fmt.Errorf("failed to remove unlocked cache: %w", err)
+		}
 	}
 
-	// Remove the file
-	if err := os.Remove(unlockedPath); err != nil {
-		return fmt.Errorf("failed to remove unlocked cache: %w", err)
+	// Remove session key if it exists
+	if _, err := os.Stat(sessionKeyPath); err == nil {
+		if err := os.Remove(sessionKeyPath); err != nil {
+			return fmt.Errorf("failed to remove session key: %w", err)
+		}
 	}
 
 	return nil

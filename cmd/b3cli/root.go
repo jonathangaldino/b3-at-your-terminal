@@ -5,7 +5,6 @@ import (
 
 	"github.com/john/b3-project/internal/config"
 	"github.com/john/b3-project/internal/wallet"
-	wcrypto "github.com/john/b3-project/internal/wallet/crypto"
 	"github.com/spf13/cobra"
 )
 
@@ -61,26 +60,8 @@ func getOrLoadWallet() (*wallet.Wallet, error) {
 	if wallet.IsUnlocked(walletPath) {
 		w, err := wallet.LoadUnlocked(walletPath)
 		if err == nil {
-			// Successfully loaded from cache
-			// However, unlocked cache doesn't include encryption key
-			// Need to unlock vault to get the key for saving
-			fmt.Println("Loading wallet from session cache...")
-			fmt.Println("Please enter your password to enable saving.")
-			password, err := readPassword("Enter master password: ")
-			if err != nil {
-				return nil, fmt.Errorf("failed to read password: %w", err)
-			}
-
-			// Unlock vault to get encryption key
-			encryptionKey, err := wcrypto.UnlockVault(walletPath, password)
-			if err != nil {
-				return nil, fmt.Errorf("failed to unlock wallet: %w", err)
-			}
-
-			// Set encryption key on the cached wallet
-			w.SetEncryptionKey(encryptionKey)
+			// Successfully loaded from cache (includes encryption key from session)
 			currentWallet = w
-			fmt.Println("✓ Wallet ready")
 			return w, nil
 		}
 		// If cache is corrupted, fall through to password prompt

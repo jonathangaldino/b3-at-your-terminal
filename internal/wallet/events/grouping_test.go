@@ -41,7 +41,7 @@ func TestApplyGrouping(t *testing.T) {
 		Type:        "Compra",
 		Institution: "XP",
 		Ticker:      "COGN3",
-		Quantity:    decimal.NewFromInt(50), // Already in new quantity
+		Quantity:    decimal.NewFromInt(50),      // Already in new quantity
 		Price:       decimal.NewFromFloat(28.00), // Already in new price
 		Amount:      decimal.NewFromFloat(1400),
 	}
@@ -349,8 +349,8 @@ func TestApplyGrouping_NoTransactionsBeforeEvent(t *testing.T) {
 
 func TestParseRatio(t *testing.T) {
 	tests := []struct {
-		input       string
-		expectedOk  bool
+		input        string
+		expectedOk   bool
 		expectedFrom int
 		expectedTo   int
 	}{

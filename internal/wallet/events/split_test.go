@@ -41,7 +41,7 @@ func TestApplySplit(t *testing.T) {
 		Type:        "Compra",
 		Institution: "XP",
 		Ticker:      "ITSA4",
-		Quantity:    decimal.NewFromInt(100), // Already in new quantity
+		Quantity:    decimal.NewFromInt(100),    // Already in new quantity
 		Price:       decimal.NewFromFloat(5.25), // Already in new price
 		Amount:      decimal.NewFromFloat(525),
 	}

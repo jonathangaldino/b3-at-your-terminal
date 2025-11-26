@@ -185,10 +185,10 @@ func displayEarningsOverview(w *wallet.Wallet) {
 	}
 
 	categories := map[string]*EarningsByType{
-		"Rendimento":                   {Count: 0, TotalAmount: decimal.Zero, Assets: make(map[string]decimal.Decimal)},
-		"Dividendo":                    {Count: 0, TotalAmount: decimal.Zero, Assets: make(map[string]decimal.Decimal)},
+		"Rendimento":                  {Count: 0, TotalAmount: decimal.Zero, Assets: make(map[string]decimal.Decimal)},
+		"Dividendo":                   {Count: 0, TotalAmount: decimal.Zero, Assets: make(map[string]decimal.Decimal)},
 		"Juros Sobre Capital Próprio": {Count: 0, TotalAmount: decimal.Zero, Assets: make(map[string]decimal.Decimal)},
-		"Resgate":                      {Count: 0, TotalAmount: decimal.Zero, Assets: make(map[string]decimal.Decimal)},
+		"Resgate":                     {Count: 0, TotalAmount: decimal.Zero, Assets: make(map[string]decimal.Decimal)},
 	}
 
 	totalGeneral := decimal.Zero
@@ -222,10 +222,10 @@ func displayEarningsOverview(w *wallet.Wallet) {
 	// Exibir por categoria
 	types := []string{"Rendimento", "Dividendo", "Juros Sobre Capital Próprio", "Resgate"}
 	typeLabels := map[string]string{
-		"Rendimento":                   "RENDIMENTOS",
-		"Dividendo":                    "DIVIDENDOS",
+		"Rendimento":                  "RENDIMENTOS",
+		"Dividendo":                   "DIVIDENDOS",
 		"Juros Sobre Capital Próprio": "JUROS SOBRE CAPITAL PRÓPRIO (JCP)",
-		"Resgate":                      "RESGATES",
+		"Resgate":                     "RESGATES",
 	}
 
 	for _, earningType := range types {

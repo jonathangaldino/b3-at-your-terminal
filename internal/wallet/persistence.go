@@ -29,17 +29,17 @@ type TransactionYAML struct {
 // AssetYAML representa um ativo simplificado para serialização YAML
 // Valores monetários são armazenados como strings para manter precisão decimal
 type AssetYAML struct {
-	Ticker             string          `yaml:"ticker"`
-	Type               string          `yaml:"type"`
-	SubType            string          `yaml:"subtype,omitempty"`
-	Segment            string          `yaml:"segment,omitempty"`
-	AveragePrice       string          `yaml:"average_price"`
-	TotalInvestedValue string          `yaml:"total_invested_value"`
-	TotalEarnings      string          `yaml:"total_earnings"`
-	Quantity           int             `yaml:"quantity"`
-	IsSubscription     bool            `yaml:"is_subscription,omitempty"`
-	SubscriptionOf     string          `yaml:"subscription_of,omitempty"`
-	Earnings           []EarningYAML   `yaml:"earnings,omitempty"`
+	Ticker             string        `yaml:"ticker"`
+	Type               string        `yaml:"type"`
+	SubType            string        `yaml:"subtype,omitempty"`
+	Segment            string        `yaml:"segment,omitempty"`
+	AveragePrice       string        `yaml:"average_price"`
+	TotalInvestedValue string        `yaml:"total_invested_value"`
+	TotalEarnings      string        `yaml:"total_earnings"`
+	Quantity           int           `yaml:"quantity"`
+	IsSubscription     bool          `yaml:"is_subscription,omitempty"`
+	SubscriptionOf     string        `yaml:"subscription_of,omitempty"`
+	Earnings           []EarningYAML `yaml:"earnings,omitempty"`
 }
 
 // EarningYAML representa um provento simplificado para serialização YAML

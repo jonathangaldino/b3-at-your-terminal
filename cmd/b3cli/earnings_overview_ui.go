@@ -55,10 +55,10 @@ var (
 
 func initialOverviewModel(w *wallet.Wallet) overviewModel {
 	categories := map[string]*EarningsByType{
-		"Rendimento":                   {Count: 0, TotalAmount: decimal.Zero, Assets: make(map[string]decimal.Decimal)},
-		"Dividendo":                    {Count: 0, TotalAmount: decimal.Zero, Assets: make(map[string]decimal.Decimal)},
+		"Rendimento":                  {Count: 0, TotalAmount: decimal.Zero, Assets: make(map[string]decimal.Decimal)},
+		"Dividendo":                   {Count: 0, TotalAmount: decimal.Zero, Assets: make(map[string]decimal.Decimal)},
 		"Juros Sobre Capital Próprio": {Count: 0, TotalAmount: decimal.Zero, Assets: make(map[string]decimal.Decimal)},
-		"Resgate":                      {Count: 0, TotalAmount: decimal.Zero, Assets: make(map[string]decimal.Decimal)},
+		"Resgate":                     {Count: 0, TotalAmount: decimal.Zero, Assets: make(map[string]decimal.Decimal)},
 	}
 
 	totalGeneral := decimal.Zero
@@ -127,10 +127,10 @@ func (m overviewModel) View() string {
 	b.WriteString("\n")
 
 	typeLabels := map[string]string{
-		"Rendimento":                   "📊 RENDIMENTOS",
-		"Dividendo":                    "💵 DIVIDENDOS",
+		"Rendimento":                  "📊 RENDIMENTOS",
+		"Dividendo":                   "💵 DIVIDENDOS",
 		"Juros Sobre Capital Próprio": "🏦 JUROS SOBRE CAPITAL PRÓPRIO (JCP)",
-		"Resgate":                      "🔄 RESGATES",
+		"Resgate":                     "🔄 RESGATES",
 	}
 
 	// Exibir por categoria

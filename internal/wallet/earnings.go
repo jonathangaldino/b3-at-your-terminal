@@ -127,10 +127,10 @@ func ValidateEarning(e *parser.Earning) error {
 
 	// Validate type is one of the four expected values
 	validTypes := map[string]bool{
-		"Rendimento":                   true,
-		"Dividendo":                    true,
+		"Rendimento":                  true,
+		"Dividendo":                   true,
 		"Juros Sobre Capital Próprio": true,
-		"Resgate":                      true,
+		"Resgate":                     true,
 	}
 
 	if !validTypes[e.Type] {

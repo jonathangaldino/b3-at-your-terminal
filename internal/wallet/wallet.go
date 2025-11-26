@@ -85,9 +85,9 @@ func (w *Wallet) RecalculateAssets() {
 
 // ConversionResult contém estatísticas sobre a conversão de subscrição
 type ConversionResult struct {
-	PurchasesFound      int
-	SalesFound          int
-	TransactionsAdded   int
+	PurchasesFound       int
+	SalesFound           int
+	TransactionsAdded    int
 	ParentQuantityBefore int
 	ParentQuantityAfter  int
 	ParentAveragePrice   decimal.Decimal

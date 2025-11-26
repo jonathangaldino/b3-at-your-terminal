@@ -48,8 +48,8 @@ A lista é ordenada alfabeticamente por ticker.
 IMPORTANTE: Você deve ter aberto uma wallet antes de usar este comando.
 Use 'b3cli wallet open <diretório>' para abrir uma wallet.`,
 	Example: `  b3cli assets overview`,
-	Args: cobra.NoArgs,
-	RunE: runAssetsOverview,
+	Args:    cobra.NoArgs,
+	RunE:    runAssetsOverview,
 }
 
 var assetsSoldCmd = &cobra.Command{
@@ -69,8 +69,8 @@ A lista mostra:
 IMPORTANTE: Você deve ter aberto uma wallet antes de usar este comando.
 Use 'b3cli wallet open <diretório>' para abrir uma wallet.`,
 	Example: `  b3cli assets sold`,
-	Args: cobra.NoArgs,
-	RunE: runAssetsSold,
+	Args:    cobra.NoArgs,
+	RunE:    runAssetsSold,
 }
 
 var assetsManageCmd = &cobra.Command{
@@ -94,8 +94,8 @@ Navegação:
 IMPORTANTE: Você deve ter aberto uma wallet antes de usar este comando.
 Use 'b3cli wallet open <diretório>' para abrir uma wallet.`,
 	Example: `  b3cli assets manage`,
-	Args: cobra.NoArgs,
-	RunE: runAssetsManage,
+	Args:    cobra.NoArgs,
+	RunE:    runAssetsManage,
 }
 
 func init() {
